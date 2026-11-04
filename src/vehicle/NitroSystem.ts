@@ -107,17 +107,23 @@ export class NitroSystem {
     }
 
     // 3. 正常竞速中的氮气激活与消耗判定
-    if (wantsToBoost && this.energy > 0) {
-      this.active = true;
-      this.energy -= this.config.consumptionRate * deltaTime;
+    if (wantsToBoost) {
+      if (this.energy > 0) {
+        this.active = true;
+        this.energy -= this.config.consumptionRate * deltaTime;
 
-      // 能量耗尽：强制断气切断加速
-      if (this.energy <= 0) {
-        this.energy = 0;
+        // 能量耗尽：强制断气切断加速
+        if (this.energy <= 0) {
+          this.energy = 0;
+          this.active = false;
+        }
+      } else {
+        // 能量为空且玩家仍按住加速键：保持未激活且不回充，避免零点抖动
         this.active = false;
+        this.energy = 0;
       }
     } else {
-      // 4. 未激活氮气：平滑自动充能恢复
+      // 4. 松开加速键：平滑自动充能恢复
       this.active = false;
       if (this.energy < this.config.maxEnergy) {
         this.energy += this.config.rechargeRate * deltaTime;
