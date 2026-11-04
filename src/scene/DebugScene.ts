@@ -5,6 +5,9 @@ export class DebugScene {
   private testCube!: THREE.Mesh;
   private testSphere!: THREE.Mesh;
   private testTorus!: THREE.Mesh;
+  private gridHelper!: THREE.GridHelper;
+  private axesHelper!: THREE.AxesHelper;
+  private ground!: THREE.Mesh;
 
   constructor() {
     this.group = new THREE.Group();
@@ -20,20 +23,20 @@ export class DebugScene {
       roughness: 0.6,
       metalness: 0.2
     });
-    const ground = new THREE.Mesh(planeGeo, planeMat);
-    ground.rotation.x = -Math.PI / 2;
-    ground.receiveShadow = true;
-    this.group.add(ground);
+    this.ground = new THREE.Mesh(planeGeo, planeMat);
+    this.ground.rotation.x = -Math.PI / 2;
+    this.ground.receiveShadow = true;
+    this.group.add(this.ground);
 
     // 2. 空间网格辅助线 (GridHelper)，60x60格，主副轴颜色区分
-    const gridHelper = new THREE.GridHelper(60, 60, 0x38bdf8, 0x334155);
-    gridHelper.position.y = 0.01; // 略微抬高避免 Z-fighting
-    this.group.add(gridHelper);
+    this.gridHelper = new THREE.GridHelper(60, 60, 0x38bdf8, 0x334155);
+    this.gridHelper.position.y = 0.01; // 略微抬高避免 Z-fighting
+    this.group.add(this.gridHelper);
 
     // 3. 坐标轴辅助线 (AxesHelper)，红 X, 绿 Y, 蓝 Z
-    const axesHelper = new THREE.AxesHelper(5);
-    axesHelper.position.set(0, 0.02, 0);
-    this.group.add(axesHelper);
+    this.axesHelper = new THREE.AxesHelper(5);
+    this.axesHelper.position.set(0, 0.02, 0);
+    this.group.add(this.axesHelper);
   }
 
   private buildTestObjects(): void {
@@ -78,7 +81,6 @@ export class DebugScene {
   }
 
   public update(deltaTime: number, elapsedTime: number): void {
-    // 旋转与浮动动画，用于验证连续帧更新的平滑度
     if (this.testCube) {
       this.testCube.rotation.x += deltaTime * 0.8;
       this.testCube.rotation.y += deltaTime * 1.0;
@@ -96,16 +98,29 @@ export class DebugScene {
     }
   }
 
+  /**
+   * 阶段 1.1 严谨资源释放：全量遍历并释放所有网格体、辅助线、几何体和材质，彻底避免内存泄漏
+   */
   public dispose(): void {
     this.group.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        child.geometry.dispose();
-        if (Array.isArray(child.material)) {
-          child.material.forEach((m) => m.dispose());
-        } else {
-          child.material.dispose();
+      if (child instanceof THREE.Mesh || child instanceof THREE.LineSegments || child instanceof THREE.Line) {
+        if (child.geometry) {
+          child.geometry.dispose();
+        }
+        if (child.material) {
+          if (Array.isArray(child.material)) {
+            child.material.forEach((m) => m.dispose());
+          } else {
+            child.material.dispose();
+          }
         }
       }
     });
+
+    // 清空 Group 子元素并从父场景解绑
+    this.group.clear();
+    if (this.group.parent) {
+      this.group.parent.remove(this.group);
+    }
   }
 }
