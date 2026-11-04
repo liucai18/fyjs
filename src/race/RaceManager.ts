@@ -43,8 +43,9 @@ export class RaceManager {
 
   // 计时核心
   private raceTime: number = 0; // 真实比赛用时 (秒)
-  private countdownTimer: number = 3.0; // 倒计时剩余秒数
+  private countdownTimer: number = 3.0; // 倒计时剩余秒数 (正数: 3/2/1, 负数: GO 展示窗口)
   private readonly countdownTotal: number = 3.0;
+  public readonly goDisplayDuration: number = 0.5; // GO! 显式展示时长 (秒)
   private topSpeedKmh: number = 0; // 本局极速记录
 
   // 起跑位置参数 (东直道起跑线后方 25m)
@@ -102,7 +103,29 @@ export class RaceManager {
   }
 
   /**
+   * 是否正处于 GO! 显示窗口
+   */
+  public isGoPhase(): boolean {
+    return this.state === RaceState.COUNTDOWN && this.countdownTimer <= 0 && this.countdownTimer > -this.goDisplayDuration;
+  }
+
+  /**
+   * 当前是否处于输入控制锁定阶段 (未发车、3-2-1阶段、暂停或完赛状态)
+   * 在 GO! 阶段，发车信号已出，车辆控制完全解锁并可行驶，计时同步启动
+   */
+  public isControlLocked(): boolean {
+    if (this.state === RaceState.READY || this.state === RaceState.PAUSED || this.state === RaceState.FINISHED) {
+      return true;
+    }
+    if (this.state === RaceState.COUNTDOWN) {
+      return this.countdownTimer > 0;
+    }
+    return false;
+  }
+
+  /**
    * 倒计时展示文本与缩放进度
+   * 严格保证 3 -> 2 -> 1 -> GO! 每一个阶段都具备真实展示窗口
    */
   public getCountdownDisplay(): { text: string; progress: number } {
     if (this.state !== RaceState.COUNTDOWN) {
@@ -115,16 +138,23 @@ export class RaceManager {
       return { text: '2', progress: t - 1.0 };
     } else if (t > 0.0) {
       return { text: '1', progress: t };
+    } else if (t > -this.goDisplayDuration) {
+      // GO! 阶段：展示窗口持续 goDisplayDuration (500ms)
+      const progress = Math.max(0, (t + this.goDisplayDuration) / this.goDisplayDuration);
+      return { text: 'GO!', progress };
     } else {
-      return { text: 'GO!', progress: Math.max(0, (t + 0.5) / 0.5) };
+      return { text: '', progress: 0 };
     }
   }
 
   /**
-   * 启动起跑倒计时流程
+   * 启动起跑倒计时流程 (严密状态守卫，只允许从 READY 状态启动)
    */
   public startCountdown(): void {
     if (this.isDisposed) return;
+    if (this.state !== RaceState.READY) {
+      return;
+    }
     this.state = RaceState.COUNTDOWN;
     this.countdownTimer = this.countdownTotal;
     this.raceTime = 0;
@@ -203,14 +233,27 @@ export class RaceManager {
     if (this.state === RaceState.COUNTDOWN) {
       this.countdownTimer -= deltaTime;
 
-      // 倒计时阶段强制刹车锁死，杜绝抢跑偷跑
-      controller.resetDynamics();
-      controller.setTransform(this.startPosition.x, this.startPosition.y, this.startPosition.z, this.startYaw);
+      if (this.countdownTimer > 0) {
+        // 3-2-1 阶段强制刹车锁死在起跑线，杜绝抢跑偷跑
+        controller.resetDynamics();
+        controller.setTransform(this.startPosition.x, this.startPosition.y, this.startPosition.z, this.startYaw);
+        return;
+      }
 
-      if (this.countdownTimer <= 0) {
-        // 倒计时结束，进入正式比赛！
+      // 进入 GO! 阶段 (持续 goDisplayDuration，例如 0.5s)
+      // 正式计时起点必须与 GO 的竞速开始时刻一致
+      this.raceTime = -this.countdownTimer;
+
+      if (currentSpeedKmh > this.topSpeedKmh) {
+        this.topSpeedKmh = currentSpeedKmh;
+      }
+
+      // GO 阶段允许驾驶，检测检查点与终点线
+      this.updateCheckpointsAndFinishLine(currentPos);
+
+      if (this.countdownTimer <= -this.goDisplayDuration) {
+        // GO 展示阶段结束，平滑进入正式 RACING 状态
         this.state = RaceState.RACING;
-        this.hasPrevPos = false;
       }
       return;
     }
@@ -222,32 +265,39 @@ export class RaceManager {
         this.topSpeedKmh = currentSpeedKmh;
       }
 
-      // 4. 检查点激活判定 (必须按顺序依次收集 1 -> 2 -> 3)
-      for (const cp of this.checkpoints) {
-        if (!this.passedCheckpoints.has(cp.id)) {
-          const dist = Math.hypot(currentPos.x - cp.x, currentPos.z - cp.z);
-          // 仅当前序检查点都已点亮时才允许点亮下一个检查点
-          const isNextInOrder = cp.id === 1 || this.passedCheckpoints.has(cp.id - 1);
-          if (dist <= cp.radius && isNextInOrder) {
-            this.passedCheckpoints.add(cp.id);
-          }
-        }
-      }
-
-      // 5. 终点线正向跨线检测 (Continuous Swept-Segment Crossing)
-      if (this.hasPrevPos) {
-        const crossed = this.checkFinishLineCrossing(this.prevVehiclePos, currentPos);
-        if (crossed) {
-          // 严格门禁：只有点亮所有 3 个检查点，才算正向有效跑完一圈！
-          if (this.passedCheckpoints.size === this.checkpoints.length) {
-            this.state = RaceState.FINISHED;
-          }
-        }
-      }
-
-      this.prevVehiclePos.copy(currentPos);
-      this.hasPrevPos = true;
+      this.updateCheckpointsAndFinishLine(currentPos);
     }
+  }
+
+  /**
+   * 检查点激活判定与终点线跨线判定
+   */
+  private updateCheckpointsAndFinishLine(currentPos: THREE.Vector3): void {
+    // 检查点激活判定 (必须按顺序依次收集 1 -> 2 -> 3)
+    for (const cp of this.checkpoints) {
+      if (!this.passedCheckpoints.has(cp.id)) {
+        const dist = Math.hypot(currentPos.x - cp.x, currentPos.z - cp.z);
+        // 仅当前序检查点都已点亮时才允许点亮下一个检查点
+        const isNextInOrder = cp.id === 1 || this.passedCheckpoints.has(cp.id - 1);
+        if (dist <= cp.radius && isNextInOrder) {
+          this.passedCheckpoints.add(cp.id);
+        }
+      }
+    }
+
+    // 终点线正向跨线检测 (Continuous Swept-Segment Crossing)
+    if (this.hasPrevPos) {
+      const crossed = this.checkFinishLineCrossing(this.prevVehiclePos, currentPos);
+      if (crossed) {
+        // 严格门禁：只有点亮所有 3 个检查点，才算正向有效跑完一圈！
+        if (this.passedCheckpoints.size === this.checkpoints.length) {
+          this.state = RaceState.FINISHED;
+        }
+      }
+    }
+
+    this.prevVehiclePos.copy(currentPos);
+    this.hasPrevPos = true;
   }
 
   /**

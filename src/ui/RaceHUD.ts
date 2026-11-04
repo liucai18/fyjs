@@ -251,10 +251,10 @@ export class RaceHUD {
       this.checkpointEl.style.color = passed === total ? '#39ff14' : '#00f0ff';
     }
 
-    // 3. 倒计时动画
+    // 3. 倒计时与发车 GO! 动画
     if (this.countdownEl) {
-      if (state === RaceState.COUNTDOWN) {
-        const { text, progress } = manager.getCountdownDisplay();
+      const { text, progress } = manager.getCountdownDisplay();
+      if (text) {
         if (text !== this.lastCountdownText) {
           this.countdownEl.innerText = text;
           this.lastCountdownText = text;
@@ -271,6 +271,7 @@ export class RaceHUD {
         this.countdownEl.style.opacity = '1.0';
       } else {
         this.countdownEl.style.display = 'none';
+        this.lastCountdownText = '';
       }
     }
 
