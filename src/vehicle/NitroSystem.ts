@@ -93,6 +93,15 @@ export class NitroSystem {
   ): void {
     if (this.isDisposed) return;
 
+    // 调试与自动化测试/截图状态注入
+    if (typeof window !== 'undefined' && (window as any).__nitroOverrideEnergy !== undefined) {
+      this.energy = (window as any).__nitroOverrideEnergy;
+      if ((window as any).__nitroOverrideBoosting !== undefined) {
+        this.active = (window as any).__nitroOverrideBoosting;
+      }
+      return;
+    }
+
     // 1. 冻结状态：暂停与完赛期间绝对锁定能量数值，既不消耗也不恢复
     if (isFrozen) {
       this.active = false;

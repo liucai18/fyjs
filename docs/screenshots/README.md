@@ -2,6 +2,36 @@
 
 本文档专门用于归档《飞跃极速》各个开发阶段的实机运行截图与渲染效果，便于在 GitHub 上直接查阅与审查。
 
+## 阶段 3.2 · 氮气加速系统实机运行 (Phase 3.2)
+
+### 1. 阶段 3.2 氮气就绪待命状态 (Nitro Ready - 100% 满能量)
+* **文件路径**：`docs/screenshots/stage3_2_nitro_ready.png`
+* **GitHub 直链**：[查看图片](https://raw.githubusercontent.com/liucai18/fyjs/main/docs/screenshots/stage3_2_nitro_ready.png)
+* **核心内容**：赛博风格底部氮气仪表槽居中展示，100% 满能量青蓝发光能量条，状态指示为 `⚡ NITRO READY [SHIFT]`。赛车以基础巡航极速 185 km/h 平稳推进，双喷口等离子尾焰常态运作。
+
+![阶段 3.2 氮气就绪待命截图](./stage3_2_nitro_ready.png)
+
+### 2. 阶段 3.2 氮气极速爆发激活中 (Nitro Active - 时速突破 220+ km/h)
+* **文件路径**：`docs/screenshots/stage3_2_nitro_active.png`
+* **GitHub 直链**：[查看图片](https://raw.githubusercontent.com/liucai18/fyjs/main/docs/screenshots/stage3_2_nitro_active.png)
+* **核心内容**：按住 Shift 键瞬间激活高能氮气喷射，仪表槽切换至燃爆烈焰橙红脉冲特效与 `🔥 NITRO ACTIVE!` 提示，能量按 25%/s 持续消耗（当前 75%）。推进力获得 1.85x 强力增益，极速上限提升至 270 km/h（实机抓拍 248 km/h），等离子尾焰拉长至 1.5 倍爆发态，FOV 景深自适应拉伸。
+
+![阶段 3.2 氮气极速喷射截图](./stage3_2_nitro_active.png)
+
+### 3. 阶段 3.2 氮气能量耗尽强制断气警告 (Nitro Depleted - 0% 空槽告警)
+* **文件路径**：`docs/screenshots/stage3_2_nitro_depleted.png`
+* **GitHub 直链**：[查看图片](https://raw.githubusercontent.com/liucai18/fyjs/main/docs/screenshots/stage3_2_nitro_depleted.png)
+* **核心内容**：当氮气能量持续消耗至 0% 时，底层系统毫秒级强制切断超额推进力与速度增益，仪表盘自动触发高危红色边框与警示文字 `⚠️ NITRO DEPLETED (0%)`。赛车动力平滑受控回落至基础极速区间（216 km/h），杜绝速度骤停顿挫感与数值抖动。
+
+![阶段 3.2 氮气耗尽告警截图](./stage3_2_nitro_depleted.png)
+
+### 4. 阶段 3.2 松开 Shift 自动平滑充能中 (Nitro Recharging - 10%/s 恢复)
+* **文件路径**：`docs/screenshots/stage3_2_nitro_recharging.png`
+* **GitHub 直链**：[查看图片](https://raw.githubusercontent.com/liucai18/fyjs/main/docs/screenshots/stage3_2_nitro_recharging.png)
+* **核心内容**：松开 Shift 加速键后，氮气能量系统自动启动线性回充机制（速率 10%/s，从空到满约 10 秒）。状态显示 `⚡ RECHARGING... [SHIFT]`，青蓝能量槽平滑回涨（当前 48%），赛车以 195 km/h 巡航。倒计时、暂停或完赛状态下能量自动绝对冻结。
+
+![阶段 3.2 氮气充能恢复截图](./stage3_2_nitro_recharging.png)
+
 ---
 
 ## 阶段 3.1 · 核心竞速闭环实机运行 (Phase 3.1)

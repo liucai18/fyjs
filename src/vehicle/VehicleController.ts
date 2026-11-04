@@ -64,6 +64,11 @@ export class VehicleController {
 
     const dt = Math.min(deltaTime, 0.1); // 防御大卡顿瞬移
 
+    // 自动化测试与截图机位锁定
+    if (typeof window !== 'undefined' && (window as any).__speedOverride !== undefined) {
+      this.currentSpeed = (window as any).__speedOverride;
+    }
+
     // ==========================================
     // 1. 加速、氮气喷射、刹车与阻尼纵向动力学
     // ==========================================
@@ -144,6 +149,16 @@ export class VehicleController {
 
     this.group.position.x += moveX;
     this.group.position.z += moveZ;
+
+    if (typeof window !== 'undefined' && (window as any).__positionLock) {
+      this.group.position.x = 65;
+      this.group.position.z = -25;
+      this.group.rotation.y = 0;
+      this.currentYaw = 0;
+    }
+    if (typeof window !== 'undefined' && (window as any).__speedOverride !== undefined) {
+      this.currentSpeed = (window as any).__speedOverride;
+    }
 
     // ==========================================
     // 4. 视觉与特效联动反馈

@@ -165,8 +165,10 @@ export function initApp(options?: InitAppOptions): AppInstance {
       const canDrive = !isControlLocked && (raceState === RaceState.RACING || createdRaceManager.isGoPhase());
       const isFrozen = raceState === RaceState.PAUSED || raceState === RaceState.FINISHED;
 
-      // 2. 读取驾驶输入并驱动车辆物理
-      let inputState = createdInput.getState();
+      // 2. 读取驾驶输入并驱动车辆物理 (支持自动化注入与测试)
+      let inputState = (typeof window !== 'undefined' && (window as any).__inputOverride)
+        ? { ...(window as any).__inputOverride }
+        : createdInput.getState();
 
       // 3. 氮气加速系统更新 (仅在允许驾驶时生效，暂停与完赛期间绝对冻结)
       createdNitro.update(deltaTime, !!inputState.nitro, canDrive, isFrozen);
@@ -215,6 +217,18 @@ export function initApp(options?: InitAppOptions): AppInstance {
 
     // 12. 启动时间循环
     createdTime.start();
+
+    if (typeof window !== 'undefined') {
+      (window as any).__game = {
+        engine: createdEngine,
+        vehicle: createdVehicle,
+        race: createdRaceManager,
+        nitro: createdNitro,
+        hud: createdRaceHUD,
+        racer: createdRacer,
+        camera: createdFollowCamera
+      };
+    }
 
     const dispose = () => {
       if (unregisterUpdate) {
@@ -268,6 +282,7 @@ export function initApp(options?: InitAppOptions): AppInstance {
       currentApp = null;
       if (typeof window !== 'undefined') {
         (window as any).__LEAP_SPEED_APP__ = null;
+        delete (window as any).__game;
       }
       console.log('🧹 《飞跃极速》阶段 3.2 竞速与氮气系统资源已完全释放！');
     };
