@@ -71,7 +71,7 @@ export class Engine {
         listenerAttached = true;
       }
     } catch (error) {
-      // 阶段 1.3 核心增强：构造函数内部自清理与原子回滚
+      // 阶段 1.4 增强：构造函数内部独立双层 catch，保证 dispose 报错时 forceContextLoss 依然百分之百执行
       console.error('❌ Engine 构造函数内部抛错，正在执行原子清理:', error);
       this.isDisposed = true;
 
@@ -82,11 +82,16 @@ export class Engine {
       if (createdRenderer) {
         try {
           createdRenderer.dispose();
+        } catch (disposeErr) {
+          console.warn('Warning during constructor renderer.dispose:', disposeErr);
+        }
+
+        try {
           if (typeof createdRenderer.forceContextLoss === 'function') {
             createdRenderer.forceContextLoss();
           }
-        } catch (cleanupErr) {
-          console.warn('Warning during constructor cleanup:', cleanupErr);
+        } catch (contextLossErr) {
+          console.warn('Warning during constructor forceContextLoss:', contextLossErr);
         }
       }
 
@@ -153,7 +158,7 @@ export class Engine {
   }
 
   /**
-   * 阶段 1.3 幂等安全释放
+   * 阶段 1.4 幂等安全释放：双层独立 catch，防止 dispose 抛错中断 forceContextLoss
    */
   public dispose(): void {
     if (this.isDisposed) return;
@@ -165,11 +170,16 @@ export class Engine {
 
     try {
       this.renderer.dispose();
+    } catch (disposeErr) {
+      console.warn('Warning during renderer.dispose:', disposeErr);
+    }
+
+    try {
       if (typeof this.renderer.forceContextLoss === 'function') {
         this.renderer.forceContextLoss();
       }
-    } catch (err) {
-      console.warn('Warning during renderer disposal:', err);
+    } catch (contextLossErr) {
+      console.warn('Warning during forceContextLoss:', contextLossErr);
     }
   }
 

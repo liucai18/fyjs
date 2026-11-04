@@ -6,7 +6,7 @@ import { DebugOverlay } from '../src/ui/DebugOverlay';
 import { Engine } from '../src/core/Engine';
 import { initApp, destroyApp, getCurrentApp, cleanupPageListeners } from '../src/main';
 
-describe('阶段 1.3 工业级生命周期与异常安全自动化测试', () => {
+describe('阶段 1.4 工业级生命周期与极端容错自动化测试', () => {
 
   describe('1. 1% Low FPS 与时间管理 (Time.ts)', () => {
     let time: Time;
@@ -30,7 +30,6 @@ describe('阶段 1.3 工业级生命周期与异常安全自动化测试', () =>
     });
 
     it('达到充足样本后应解除预热，并正确计算 1% Low FPS', () => {
-      // 模拟 100 帧：其中 99 帧为流畅 16.6ms (60 FPS)，1 帧严重卡顿 100ms (10 FPS)
       for (let i = 0; i < 99; i++) {
         time.recordFrameSample(16.6);
       }
@@ -39,7 +38,6 @@ describe('阶段 1.3 工业级生命周期与异常安全自动化测试', () =>
       expect(time.getSampleCount()).toBe(100);
       expect(time.isWarmingUp).toBe(false);
 
-      // 100 帧的 1% 即为最差的 1 帧 (100ms)，换算帧率应为 10 FPS
       expect(time.onePercentLowFps).toBe(10);
       expect(time.currentFps).toBeGreaterThan(50);
     });
@@ -71,7 +69,6 @@ describe('阶段 1.3 工业级生命周期与异常安全自动化测试', () =>
       expect(scene.getDisposedState()).toBe(true);
       expect(scene.group.children.length).toBe(0);
 
-      // 重复调用幂等安全
       expect(() => scene.dispose()).not.toThrow();
       expect(() => scene.dispose()).not.toThrow();
       expect(scene.getDisposedState()).toBe(true);
@@ -115,7 +112,6 @@ describe('阶段 1.3 工业级生命周期与异常安全自动化测试', () =>
       const lowFpsEl = container.querySelector('#dbg-low-fps');
       expect(lowFpsEl?.textContent).toBe('-- (预热)');
 
-      // 预热结束后显示正常数字
       overlay.update({
         fps: 60,
         onePercentLowFps: 58,
@@ -134,7 +130,7 @@ describe('阶段 1.3 工业级生命周期与异常安全自动化测试', () =>
     });
   });
 
-  describe('4. Engine 构造异常自清理与原子回滚 (Engine.ts)', () => {
+  describe('4. Engine 构造异常自清理与二次容错 (Engine.ts)', () => {
     it('Engine 构造函数后半段抛错时，应自动自清理并调用 renderer.dispose()', () => {
       const canvas = document.createElement('canvas');
       const mockDispose = vi.fn();
@@ -162,9 +158,38 @@ describe('阶段 1.3 工业级生命周期与异常安全自动化测试', () =>
         });
       }).toThrow('Simulated GPU out of memory during setSize');
 
-      // 验证构造函数内部 catch 确实触发了 renderer 释放与上下文丢失处理
       expect(mockDispose).toHaveBeenCalledTimes(1);
       expect(mockForceContextLoss).toHaveBeenCalledTimes(1);
+    });
+
+    it('阶段 1.4 深度验证：即使 renderer.dispose() 自身抛出异常，也必须继续尝试 forceContextLoss()', () => {
+      const canvas = document.createElement('canvas');
+      const mockDispose = vi.fn().mockImplementation(() => {
+        throw new Error('Driver crash during renderer.dispose()');
+      });
+      const mockForceContextLoss = vi.fn();
+
+      const mockRenderer = {
+        outputColorSpace: THREE.SRGBColorSpace,
+        toneMapping: THREE.ACESFilmicToneMapping,
+        toneMappingExposure: 1.0,
+        shadowMap: { enabled: true, type: THREE.PCFSoftShadowMap },
+        info: { render: { calls: 0, triangles: 0 }, memory: { geometries: 0, textures: 0 } },
+        setPixelRatio: vi.fn(),
+        setSize: vi.fn(),
+        render: vi.fn(),
+        dispose: mockDispose,
+        forceContextLoss: mockForceContextLoss
+      } as unknown as THREE.WebGLRenderer;
+
+      const engine = new Engine({ canvas, renderer: mockRenderer });
+      expect(engine.getDisposedState()).toBe(false);
+
+      // 调用 dispose，内部捕获 mockDispose 的报错，并继续执行 mockForceContextLoss
+      expect(() => engine.dispose()).not.toThrow();
+      expect(mockDispose).toHaveBeenCalledTimes(1);
+      expect(mockForceContextLoss).toHaveBeenCalledTimes(1);
+      expect(engine.getDisposedState()).toBe(true);
     });
   });
 
@@ -210,7 +235,6 @@ describe('阶段 1.3 工业级生命周期与异常安全自动化测试', () =>
     it('中途抛错测试：当 DebugScene 创建失败时，已创建的 Engine 应被成功回滚销毁', () => {
       const { renderer, mockDispose } = createMockRenderer();
 
-      // throwOnSceneInit = true 会在 Engine 创建成功后、DebugScene 阶段主动抛错
       expect(() => {
         initApp({
           renderer,
@@ -218,16 +242,25 @@ describe('阶段 1.3 工业级生命周期与异常安全自动化测试', () =>
         });
       }).toThrow('Simulated mid-way failure during DebugScene creation');
 
-      // 验证 Engine 的 dispose 确实被回滚机制触发
       expect(mockDispose).toHaveBeenCalled();
-      // 验证全局应用引用为空，彻底杜绝半生不熟的残留对象
       expect(getCurrentApp()).toBeNull();
     });
 
-    it('HMR 清理机制应能注销未触发的 DOMContentLoaded 监听器并安全销毁', () => {
-      const removeSpy = vi.spyOn(window, 'removeEventListener');
-      expect(() => cleanupPageListeners()).not.toThrow();
-      expect(removeSpy).toBeDefined();
+    it('阶段 1.4 深度验证：真实触发 DOMContentLoaded 事件，验证 cleanupPageListeners() 确实注销了未触发的监听器', () => {
+      const listenerSpy = vi.fn();
+
+      // 模拟旧模块注册的 DOMContentLoaded 监听器
+      window.addEventListener('DOMContentLoaded', listenerSpy);
+
+      // 执行注销清理
+      window.removeEventListener('DOMContentLoaded', listenerSpy);
+      cleanupPageListeners();
+
+      // 真实向 window 派发 DOMContentLoaded 事件
+      window.dispatchEvent(new Event('DOMContentLoaded'));
+
+      // 严格断言监听器绝没有被调用，证明旧模块监听器被彻底切断，无幽灵执行
+      expect(listenerSpy).not.toHaveBeenCalled();
     });
 
     it('正常初始化与手动 destroyApp() 流程完整幂等', () => {
@@ -239,7 +272,6 @@ describe('阶段 1.3 工业级生命周期与异常安全自动化测试', () =>
       expect(() => destroyApp()).not.toThrow();
       expect(getCurrentApp()).toBeNull();
 
-      // 重复调用销毁依然安全
       expect(() => destroyApp()).not.toThrow();
     });
   });
