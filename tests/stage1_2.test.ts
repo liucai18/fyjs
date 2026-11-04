@@ -4,7 +4,7 @@ import { Time } from '../src/core/Time';
 import { DebugScene } from '../src/scene/DebugScene';
 import { DebugOverlay } from '../src/ui/DebugOverlay';
 import { Engine } from '../src/core/Engine';
-import { initApp, destroyApp, getCurrentApp, cleanupPageListeners } from '../src/main';
+import { initApp, destroyApp, getCurrentApp, cleanupPageListeners, setupPageListeners, getDOMContentLoadedHandler } from '../src/main';
 
 describe('阶段 1.4 工业级生命周期与极端容错自动化测试', () => {
 
@@ -191,6 +191,43 @@ describe('阶段 1.4 工业级生命周期与极端容错自动化测试', () =>
       expect(mockForceContextLoss).toHaveBeenCalledTimes(1);
       expect(engine.getDisposedState()).toBe(true);
     });
+
+    it('阶段 1.4 任务 B：构造中途 setSize 抛错且清理分支 renderer.dispose 也抛错时，原始错误不被掩盖且 forceContextLoss 依然执行', () => {
+      const canvas = document.createElement('canvas');
+      const mockDispose = vi.fn().mockImplementation(() => {
+        throw new Error('Fatal GPU driver crash during rollback dispose');
+      });
+      const mockForceContextLoss = vi.fn();
+
+      const mockRenderer = {
+        outputColorSpace: THREE.SRGBColorSpace,
+        toneMapping: THREE.ACESFilmicToneMapping,
+        toneMappingExposure: 1.0,
+        shadowMap: { enabled: true, type: THREE.PCFSoftShadowMap },
+        info: { render: { calls: 0, triangles: 0 }, memory: { geometries: 0, textures: 0 } },
+        setPixelRatio: vi.fn(),
+        setSize: vi.fn().mockImplementation(() => {
+          throw new Error('Simulated GPU out of memory during setSize');
+        }),
+        render: vi.fn(),
+        dispose: mockDispose,
+        forceContextLoss: mockForceContextLoss
+      } as unknown as THREE.WebGLRenderer;
+
+      // 验证 1：构造函数仍然抛出原始初始化错误，不因清理异常掩盖
+      expect(() => {
+        new Engine({
+          canvas,
+          renderer: mockRenderer
+        });
+      }).toThrow('Simulated GPU out of memory during setSize');
+
+      // 验证 2：renderer.dispose() 确实被调用
+      expect(mockDispose).toHaveBeenCalledTimes(1);
+
+      // 验证 3：即使 dispose 报错，renderer.forceContextLoss() 仍然被调用
+      expect(mockForceContextLoss).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('5. HMR 闭环与初始化异常中途回滚 (main.ts)', () => {
@@ -246,21 +283,25 @@ describe('阶段 1.4 工业级生命周期与极端容错自动化测试', () =>
       expect(getCurrentApp()).toBeNull();
     });
 
-    it('阶段 1.4 深度验证：真实触发 DOMContentLoaded 事件，验证 cleanupPageListeners() 确实注销了未触发的监听器', () => {
-      const listenerSpy = vi.fn();
+    it('阶段 1.4 任务 A：真实验证 HMR 监听器注销与切断（测试 main.ts 真实注册的 handler）', () => {
+      // 1. 让 main.ts 真正注册它自己的 DOMContentLoaded handler
+      const realHandler = setupPageListeners();
+      expect(realHandler).not.toBeNull();
+      expect(getDOMContentLoadedHandler()).toBe(realHandler);
 
-      // 模拟旧模块注册的 DOMContentLoaded 监听器
-      window.addEventListener('DOMContentLoaded', listenerSpy);
+      // 2. 监听 removeEventListener spy，验证注销时传入的事件名和真实 handler 均准确无误
+      const removeSpy = vi.spyOn(window, 'removeEventListener');
 
-      // 执行注销清理
-      window.removeEventListener('DOMContentLoaded', listenerSpy);
+      // 3. 严格禁止测试提前调用 removeEventListener，直接调用 main.ts 的 cleanupPageListeners()
       cleanupPageListeners();
 
-      // 真实向 window 派发 DOMContentLoaded 事件
-      window.dispatchEvent(new Event('DOMContentLoaded'));
+      // 4. 断言 removeEventListener 被精准调用，注销的是 main.ts 内部持有的真实 realHandler
+      expect(removeSpy).toHaveBeenCalledWith('DOMContentLoaded', realHandler);
+      expect(getDOMContentLoadedHandler()).toBeNull();
 
-      // 严格断言监听器绝没有被调用，证明旧模块监听器被彻底切断，无幽灵执行
-      expect(listenerSpy).not.toHaveBeenCalled();
+      // 5. 派发真实的 DOMContentLoaded 事件，验证由于旧 handler 已被完全切断，绝不会触发 autoInit() 产生全局实例
+      window.dispatchEvent(new Event('DOMContentLoaded'));
+      expect(getCurrentApp()).toBeNull();
     });
 
     it('正常初始化与手动 destroyApp() 流程完整幂等', () => {

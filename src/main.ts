@@ -32,6 +32,20 @@ export function getDOMContentLoadedHandler(): (() => void) | null {
   return domContentLoadedHandler;
 }
 
+export function setupPageListeners(): (() => void) | null {
+  cleanupPageListeners();
+  if (typeof window !== 'undefined') {
+    domContentLoadedHandler = () => {
+      cleanupPageListeners();
+      if (document.getElementById('game-canvas')) {
+        initApp();
+      }
+    };
+    window.addEventListener('DOMContentLoaded', domContentLoadedHandler);
+  }
+  return domContentLoadedHandler;
+}
+
 export function initApp(options?: InitAppOptions): AppInstance {
   // 1. 如果已有实例，先完全安全销毁，确保幂等性
   if (currentApp) {
@@ -176,8 +190,7 @@ if (typeof window !== 'undefined') {
   };
 
   if (document.readyState === 'loading') {
-    domContentLoadedHandler = () => autoInit();
-    window.addEventListener('DOMContentLoaded', domContentLoadedHandler);
+    setupPageListeners();
   } else {
     autoInit();
   }
