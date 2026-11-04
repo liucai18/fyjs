@@ -9,6 +9,7 @@ export interface DebugMetrics {
   pixelRatio: number;
   drawCalls: number;
   triangles: number;
+  speedKmh?: number; // 阶段 2 实时航速
 }
 
 export class DebugOverlay {
@@ -18,6 +19,7 @@ export class DebugOverlay {
   // DOM 节点引用缓存
   private fpsEl!: HTMLElement;
   private lowFpsEl!: HTMLElement;
+  private speedEl!: HTMLElement;
   private rawFtEl!: HTMLElement;
   private gameDtEl!: HTMLElement;
   private resEl!: HTMLElement;
@@ -25,7 +27,7 @@ export class DebugOverlay {
   private dcEl!: HTMLElement;
   private triEl!: HTMLElement;
 
-  // 阶段 1.2 建议优化：DOM 更新节流器（150ms），大幅减轻 UI 重绘与样式重排
+  // DOM 更新节流器（150ms），大幅减轻 UI 重绘与样式重排
   private lastDomUpdateTime: number = 0;
   private readonly throttleIntervalMs: number = 150;
 
@@ -42,8 +44,12 @@ export class DebugOverlay {
   private initStructure(): void {
     this.container.innerHTML = `
       <div class="title">
-        <span>⚡ 飞跃极速 · 引擎调试台</span>
-        <span id="dbg-status" style="color: #4ade80; font-size: 11px;">RUNNING (v1.2)</span>
+        <span>⚡ 飞跃极速 · 实时仪表盘</span>
+        <span id="dbg-status" style="color: #4ade80; font-size: 11px;">RUNNING (v2.0)</span>
+      </div>
+      <div class="item" style="background: rgba(0, 240, 255, 0.12); padding: 3px 6px; border-radius: 4px; margin-bottom: 4px;">
+        <span class="label" style="color: #00f0ff; font-weight: bold;">⚡ 实时航速:</span>
+        <span class="val highlight" id="dbg-speed" style="color: #00f0ff; font-weight: bold; font-size: 15px;">0 km/h</span>
       </div>
       <div class="item">
         <span class="label">平均帧率 (FPS):</span>
@@ -77,9 +83,8 @@ export class DebugOverlay {
         <span class="label">三角面数:</span>
         <span class="val" id="dbg-triangles">--</span>
       </div>
-      <div class="item">
-        <span class="label">生命周期状态:</span>
-        <span class="val" style="color: #38bdf8;">阶段 1.2 最终版</span>
+      <div style="margin-top: 6px; font-size: 11px; color: #94a3b8; border-top: 1px solid rgba(255,255,255,0.12); padding-top: 4px; line-height: 1.4;">
+        🎮 操作: <b>W/↑</b> 加速 | <b>S/↓</b> 刹车倒车 | <b>A/D</b> 转向
       </div>
     `;
   }
@@ -87,6 +92,7 @@ export class DebugOverlay {
   private cacheDomReferences(): void {
     this.fpsEl = this.container.querySelector('#dbg-fps') as HTMLElement;
     this.lowFpsEl = this.container.querySelector('#dbg-low-fps') as HTMLElement;
+    this.speedEl = this.container.querySelector('#dbg-speed') as HTMLElement;
     this.rawFtEl = this.container.querySelector('#dbg-raw-frametime') as HTMLElement;
     this.gameDtEl = this.container.querySelector('#dbg-game-delta') as HTMLElement;
     this.resEl = this.container.querySelector('#dbg-resolution') as HTMLElement;
@@ -107,6 +113,9 @@ export class DebugOverlay {
     if (this.fpsEl) this.fpsEl.textContent = `${metrics.fps}`;
     if (this.lowFpsEl) {
       this.lowFpsEl.textContent = metrics.isWarmingUp ? '-- (预热)' : `${metrics.onePercentLowFps}`;
+    }
+    if (this.speedEl && metrics.speedKmh !== undefined) {
+      this.speedEl.textContent = `${metrics.speedKmh} km/h`;
     }
     if (this.rawFtEl) this.rawFtEl.textContent = `${metrics.rawFrameTimeMs.toFixed(2)} ms`;
     if (this.gameDtEl) this.gameDtEl.textContent = `${metrics.gameDeltaMs.toFixed(2)} ms`;

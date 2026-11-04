@@ -269,7 +269,7 @@ describe('阶段 1.4 工业级生命周期与极端容错自动化测试', () =>
       expect(getCurrentApp()).toBeNull();
     });
 
-    it('中途抛错测试：当 DebugScene 创建失败时，已创建的 Engine 应被成功回滚销毁', () => {
+    it('中途抛错测试：当 TrackScene 创建失败时，已创建的 Engine 应被成功回滚销毁', () => {
       const { renderer, mockDispose } = createMockRenderer();
 
       expect(() => {
@@ -277,7 +277,7 @@ describe('阶段 1.4 工业级生命周期与极端容错自动化测试', () =>
           renderer,
           throwOnSceneInit: true
         });
-      }).toThrow('Simulated mid-way failure during DebugScene creation');
+      }).toThrow('Simulated mid-way failure during TrackScene creation');
 
       expect(mockDispose).toHaveBeenCalled();
       expect(getCurrentApp()).toBeNull();

@@ -4,6 +4,31 @@
 
 ---
 
+## 阶段 2 · 原创科幻赛车与基础驾驶系统实机运行 (Phase 2)
+
+### 1. 阶段 2 起跑线待命实机画面 (Starting Grid)
+* **文件路径**：`docs/screenshots/stage2_starting_grid.png`
+* **GitHub 直链**：[查看图片](https://raw.githubusercontent.com/liucai18/fyjs/main/docs/screenshots/stage2_starting_grid.png)
+* **核心内容**：第三人称智能跟随机位、起跑线门架拱门、霓虹赛道护栏与实时航速仪表盘（0 km/h）。
+
+![阶段 2 起跑线实机截图](./stage2_starting_grid.png)
+
+### 2. 阶段 2 极速直线冲刺实机画面 (High Speed Driving)
+* **文件路径**：`docs/screenshots/stage2_high_speed_driving.png`
+* **GitHub 直链**：[查看图片](https://raw.githubusercontent.com/liucai18/fyjs/main/docs/screenshots/stage2_high_speed_driving.png)
+* **核心内容**：W键加速冲刺、双联重型离子矢量引擎满油门拉长超燃等离子尾焰、速度FOV景深自适应拉伸。
+
+![阶段 2 极速冲刺实机截图](./stage2_high_speed_driving.png)
+
+### 3. 阶段 2 弯道极限过弯与侧倾实机画面 (Curve Cornering)
+* **文件路径**：`docs/screenshots/stage2_curve_cornering.png`
+* **GitHub 直链**：[查看图片](https://raw.githubusercontent.com/liucai18/fyjs/main/docs/screenshots/stage2_curve_cornering.png)
+* **核心内容**：127 km/h 高速大弯道转向、飞车物理侧倾倾角、赛道护栏碰撞反弹约束保护。
+
+![阶段 2 极限过弯实机截图](./stage2_curve_cornering.png)
+
+---
+
 ## 阶段 1.4 · 终极质量闭环与实机真机运行 (Phase 1.4)
 
 ### 1. 阶段 1.4 终极闭环实机运行与监控台

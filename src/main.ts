@@ -1,20 +1,28 @@
 import * as THREE from 'three';
 import { Engine } from './core/Engine';
 import { Time } from './core/Time';
-import { DebugScene } from './scene/DebugScene';
+import { Input } from './core/Input';
+import { TrackScene } from './scene/TrackScene';
+import { HoverRacer } from './vehicle/HoverRacer';
+import { VehicleController } from './vehicle/VehicleController';
+import { FollowCamera } from './camera/FollowCamera';
 import { DebugOverlay } from './ui/DebugOverlay';
 
 export interface AppInstance {
   engine: Engine;
   time: Time;
-  debugScene: DebugScene;
+  input: Input;
+  trackScene: TrackScene;
+  hoverRacer: HoverRacer;
+  vehicleController: VehicleController;
+  followCamera: FollowCamera;
   overlay: DebugOverlay;
   dispose: () => void;
 }
 
 export interface InitAppOptions {
   renderer?: THREE.WebGLRenderer;
-  throwOnSceneInit?: boolean; // 用于自动化验证中途初始化失败时的原子回滚机制
+  throwOnSceneInit?: boolean; // 用于单元测试验证中途初始化失败时的原子回滚机制
 }
 
 let currentApp: AppInstance | null = null;
@@ -54,7 +62,11 @@ export function initApp(options?: InitAppOptions): AppInstance {
 
   // 跟踪已创建的部分资源，以便在异常时执行完全原子回滚
   let createdEngine: Engine | null = null;
-  let createdDebugScene: DebugScene | null = null;
+  let createdTrackScene: TrackScene | null = null;
+  let createdRacer: HoverRacer | null = null;
+  let createdVehicle: VehicleController | null = null;
+  let createdFollowCamera: FollowCamera | null = null;
+  let createdInput: Input | null = null;
   let createdOverlay: DebugOverlay | null = null;
   let createdTime: Time | null = null;
   let unregisterUpdate: (() => void) | null = null;
@@ -73,41 +85,62 @@ export function initApp(options?: InitAppOptions): AppInstance {
       renderer: options?.renderer
     });
 
-    // 阶段 1.3 测试注入：模拟第 2 步中途初始化抛错
+    // 自动化测试注入点：模拟第 2 步中途初始化抛错
     if (options?.throwOnSceneInit) {
-      throw new Error('Simulated mid-way failure during DebugScene creation');
+      throw new Error('Simulated mid-way failure during TrackScene creation');
     }
 
-    // 2. 阶段 1 调试场景
-    createdDebugScene = new DebugScene();
-    createdEngine.scene.add(createdDebugScene.group);
+    // 2. 阶段 2 真实可驾驶科幻赛道 (600m 环形赛道 + 霓虹护栏)
+    createdTrackScene = new TrackScene();
+    createdEngine.scene.add(createdTrackScene.group);
 
-    // 3. 性能面板 (150ms 节流)
+    // 3. 原创科幻反重力飞车 (Prototype X-1)
+    createdRacer = new HoverRacer();
+    createdEngine.scene.add(createdRacer.group);
+
+    // 4. 车辆物理动力学控制器 (出生在东直道起跑线前方)
+    createdVehicle = new VehicleController(createdRacer);
+    createdVehicle.setTransform(createdTrackScene.radius, 0.45, -25, 0);
+
+    // 5. 第三人称智能平滑追踪摄像机 (平滑跟随飞车)
+    createdFollowCamera = new FollowCamera(createdEngine.camera);
+    createdFollowCamera.follow(createdRacer.group);
+
+    // 6. 键盘输入管理
+    createdInput = new Input();
+
+    // 7. 实时仪表盘面板 (150ms 节流更新)
     createdOverlay = new DebugOverlay('debug-overlay');
 
-    // 4. 时间管理器 (1000 帧滑动窗口)
+    // 8. 高精时间管理器 (1000 帧滑动窗口)
     createdTime = new Time();
 
-    // 5. 挂载主循环回调
-    unregisterUpdate = createdTime.onUpdate((deltaTime, elapsedTime, rawDeltaTime) => {
-      if (!createdDebugScene || !createdEngine || !createdTime || !createdOverlay) return;
+    // 9. 挂载主游戏循环
+    unregisterUpdate = createdTime.onUpdate((deltaTime, _elapsedTime, rawDeltaTime) => {
+      if (!createdTrackScene || !createdEngine || !createdTime || !createdOverlay || !createdVehicle || !createdFollowCamera || !createdInput) {
+        return;
+      }
 
-      createdDebugScene.update(deltaTime, elapsedTime);
+      // 1. 读取驾驶输入并驱动车辆物理
+      const inputState = createdInput.getState();
+      createdVehicle.update(deltaTime, inputState);
 
-      const radius = 22;
-      const speed = 0.2;
-      createdEngine.camera.position.x = Math.sin(elapsedTime * speed) * radius;
-      createdEngine.camera.position.z = Math.cos(elapsedTime * speed) * radius;
-      createdEngine.camera.position.y = 10 + Math.sin(elapsedTime * 0.5) * 2;
-      createdEngine.camera.lookAt(0, 1.5, 0);
+      // 2. 赛道边界约束与防穿模反弹
+      createdTrackScene.checkBoundaryCollision(createdVehicle);
 
+      // 3. 第三人称平滑智能跟随运镜
+      createdFollowCamera.update(deltaTime, createdVehicle.getSpeed());
+
+      // 4. 执行渲染
       createdEngine.render();
 
+      // 5. 刷新仪表盘与性能面板
       const renderInfo = createdEngine.getRenderInfo();
       createdOverlay.update({
         fps: createdTime.currentFps,
         onePercentLowFps: createdTime.onePercentLowFps,
         isWarmingUp: createdTime.isWarmingUp,
+        speedKmh: createdVehicle.getSpeedKmh(),
         rawFrameTimeMs: rawDeltaTime * 1000,
         gameDeltaMs: deltaTime * 1000,
         width: typeof window !== 'undefined' ? window.innerWidth : 1280,
@@ -118,7 +151,7 @@ export function initApp(options?: InitAppOptions): AppInstance {
       });
     });
 
-    // 6. 启动时间循环
+    // 10. 启动时间循环
     createdTime.start();
 
     const dispose = () => {
@@ -126,13 +159,29 @@ export function initApp(options?: InitAppOptions): AppInstance {
         unregisterUpdate();
         unregisterUpdate = null;
       }
+      if (createdInput) {
+        createdInput.dispose();
+        createdInput = null;
+      }
+      if (createdFollowCamera) {
+        createdFollowCamera.dispose();
+        createdFollowCamera = null;
+      }
+      if (createdVehicle) {
+        createdVehicle.dispose();
+        createdVehicle = null;
+      }
+      if (createdRacer) {
+        createdRacer.dispose();
+        createdRacer = null;
+      }
+      if (createdTrackScene) {
+        createdTrackScene.dispose();
+        createdTrackScene = null;
+      }
       if (createdTime) {
         createdTime.dispose();
         createdTime = null;
-      }
-      if (createdDebugScene) {
-        createdDebugScene.dispose();
-        createdDebugScene = null;
       }
       if (createdEngine) {
         createdEngine.dispose();
@@ -143,25 +192,32 @@ export function initApp(options?: InitAppOptions): AppInstance {
         createdOverlay = null;
       }
       currentApp = null;
-      console.log('🧹 《飞跃极速》阶段 1.3 资源生命周期已完全释放！');
+      console.log('🧹 《飞跃极速》阶段 2 驾驶系统资源已完全释放！');
     };
 
     currentApp = {
       engine: createdEngine,
       time: createdTime,
-      debugScene: createdDebugScene,
+      input: createdInput,
+      trackScene: createdTrackScene,
+      hoverRacer: createdRacer,
+      vehicleController: createdVehicle,
+      followCamera: createdFollowCamera,
       overlay: createdOverlay,
       dispose
     };
 
-    console.log('🚀 《飞跃极速》阶段 1.3 · 架构健壮性与自动化质检就绪！');
+    console.log('🚀 《飞跃极速》阶段 2 · 原创科幻飞车与基础驾驶系统就绪！');
     return currentApp;
   } catch (error) {
-    // 阶段 1.3 核心原子回滚：即使是中途抛错，也确保已生成的先驱资源被 100% 释放
-    console.error('❌ 初始化失败，正在执行阶段 1.3 异常原子回滚:', error);
+    console.error('❌ 初始化失败，正在执行阶段 2 异常原子回滚:', error);
     if (unregisterUpdate) unregisterUpdate();
+    if (createdInput) createdInput.dispose();
+    if (createdFollowCamera) createdFollowCamera.dispose();
+    if (createdVehicle) createdVehicle.dispose();
+    if (createdRacer) createdRacer.dispose();
+    if (createdTrackScene) createdTrackScene.dispose();
     if (createdTime) createdTime.dispose();
-    if (createdDebugScene) createdDebugScene.dispose();
     if (createdEngine) createdEngine.dispose();
     if (createdOverlay) createdOverlay.dispose();
     currentApp = null;
@@ -195,7 +251,7 @@ if (typeof window !== 'undefined') {
     autoInit();
   }
 
-  // 阶段 1.3 Vite HMR 严谨热重载清理：销毁实例并强制清理尚未触发的 DOMContentLoaded 监听器
+  // Vite HMR 热更新安全清理
   if (import.meta.hot) {
     import.meta.hot.dispose(() => {
       console.log('🔥 Vite HMR 热更新触发：执行全局销毁与旧监听器注销...');
