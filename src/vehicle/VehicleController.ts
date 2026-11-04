@@ -169,6 +169,16 @@ export class VehicleController {
   }
 
   /**
+   * 重置动力学速度与内部输入状态
+   */
+  public resetDynamics(): void {
+    this.currentSpeed = 0;
+    this.smoothedSteer = 0;
+    this.racer.setThrottle(0);
+    this.racer.setSteering(0);
+  }
+
+  /**
    * 施加边界约束与反弹
    */
   public applyBounce(bounceX: number, bounceZ: number): void {

@@ -15,6 +15,7 @@ export interface InputState {
  */
 export class Input {
   private readonly keys = new Set<string>();
+  private readonly actionListeners = new Map<string, Set<() => void>>();
   private readonly keydownHandler: (e: KeyboardEvent) => void;
   private readonly keyupHandler: (e: KeyboardEvent) => void;
   private readonly blurHandler: () => void;
@@ -30,6 +31,11 @@ export class Input {
         }
       }
       this.keys.add(e.code);
+      if (e.code === 'KeyR') {
+        this.triggerAction('reset');
+      } else if (e.code === 'KeyP' || e.code === 'Escape') {
+        this.triggerAction('pause');
+      }
     };
 
     this.keyupHandler = (e: KeyboardEvent) => {
@@ -79,6 +85,28 @@ export class Input {
   }
 
   /**
+   * 注册单次动作键触发事件 (reset / pause)
+   */
+  public onAction(action: 'reset' | 'pause', callback: () => void): () => void {
+    if (!this.actionListeners.has(action)) {
+      this.actionListeners.set(action, new Set());
+    }
+    this.actionListeners.get(action)!.add(callback);
+    return () => {
+      this.actionListeners.get(action)?.delete(callback);
+    };
+  }
+
+  public triggerAction(action: 'reset' | 'pause'): void {
+    const listeners = this.actionListeners.get(action);
+    if (listeners) {
+      for (const cb of listeners) {
+        cb();
+      }
+    }
+  }
+
+  /**
    * 彻底安全销毁所有全局事件监听
    */
   public dispose(): void {
@@ -91,6 +119,7 @@ export class Input {
       window.removeEventListener('blur', this.blurHandler);
     }
     this.keys.clear();
+    this.actionListeners.clear();
   }
 
   public getDisposedState(): boolean {

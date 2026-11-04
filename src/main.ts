@@ -7,6 +7,8 @@ import { HoverRacer } from './vehicle/HoverRacer';
 import { VehicleController } from './vehicle/VehicleController';
 import { FollowCamera } from './camera/FollowCamera';
 import { DebugOverlay } from './ui/DebugOverlay';
+import { RaceManager, RaceState } from './race/RaceManager';
+import { RaceHUD } from './ui/RaceHUD';
 
 export interface AppInstance {
   engine: Engine;
@@ -17,6 +19,8 @@ export interface AppInstance {
   vehicleController: VehicleController;
   followCamera: FollowCamera;
   overlay: DebugOverlay;
+  raceManager: RaceManager;
+  raceHUD: RaceHUD;
   dispose: () => void;
 }
 
@@ -68,6 +72,8 @@ export function initApp(options?: InitAppOptions): AppInstance {
   let createdFollowCamera: FollowCamera | null = null;
   let createdInput: Input | null = null;
   let createdOverlay: DebugOverlay | null = null;
+  let createdRaceManager: RaceManager | null = null;
+  let createdRaceHUD: RaceHUD | null = null;
   let createdTime: Time | null = null;
   let unregisterUpdate: (() => void) | null = null;
 
@@ -112,29 +118,61 @@ export function initApp(options?: InitAppOptions): AppInstance {
     // 7. 实时仪表盘面板 (150ms 节流更新)
     createdOverlay = new DebugOverlay('debug-overlay');
 
-    // 8. 高精时间管理器 (1000 帧滑动窗口)
+    // 8. 比赛核心管理器 (状态机、3-2-1-GO倒计时、三道检查点门禁与前后帧连续冲线检测)
+    createdRaceManager = new RaceManager({
+      countdownDuration: 3.0,
+      startPosition: new THREE.Vector3(createdTrackScene.radius, 0.45, -25),
+      startYaw: 0
+    });
+    createdRaceManager.startCountdown();
+
+    // 9. 竞速专属 HUD (倒计时横幅、毫秒计时器与完赛结算弹窗)
+    createdRaceHUD = new RaceHUD('race-hud');
+
+    // 绑定全局动作热键 (R 键重试起跑，P / Esc 键暂停切换)
+    createdInput.onAction('reset', () => {
+      if (createdVehicle) {
+        createdRaceManager?.reset(createdVehicle);
+        createdFollowCamera?.snap();
+      }
+    });
+
+    createdInput.onAction('pause', () => {
+      createdRaceManager?.togglePause();
+    });
+
+    // 10. 高精时间管理器 (1000 帧滑动窗口)
     createdTime = new Time();
 
-    // 9. 挂载主游戏循环
+    // 11. 挂载主游戏循环
     unregisterUpdate = createdTime.onUpdate((deltaTime, _elapsedTime, rawDeltaTime) => {
-      if (!createdTrackScene || !createdEngine || !createdTime || !createdOverlay || !createdVehicle || !createdFollowCamera || !createdInput) {
+      if (!createdTrackScene || !createdEngine || !createdTime || !createdOverlay || !createdVehicle || !createdFollowCamera || !createdInput || !createdRaceManager || !createdRaceHUD) {
         return;
       }
 
-      // 1. 读取驾驶输入并驱动车辆物理
-      const inputState = createdInput.getState();
-      createdVehicle.update(deltaTime, inputState);
+      // 1. 比赛状态机更新 (倒计时递减、计时累加、检查点拾取与冲线检测)
+      createdRaceManager.update(deltaTime, createdVehicle);
 
-      // 2. 赛道边界约束与防穿模反弹
-      createdTrackScene.checkBoundaryCollision(createdVehicle);
+      // 2. 读取驾驶输入并驱动车辆物理
+      let inputState = createdInput.getState();
+      
+      // 倒计时阶段或暂停阶段，强制锁死油门不产生驱动动力，严禁抢跑
+      if (createdRaceManager.getState() === RaceState.COUNTDOWN || createdRaceManager.getState() === RaceState.PAUSED) {
+        inputState = { ...inputState, forward: false, backward: false };
+      }
 
-      // 3. 第三人称平滑智能跟随运镜
-      createdFollowCamera.update(deltaTime, createdVehicle.getSpeed());
+      // 非暂停状态下正常更新车辆动力学与摄像机
+      if (createdRaceManager.getState() !== RaceState.PAUSED) {
+        createdVehicle.update(deltaTime, inputState);
+        createdTrackScene.checkBoundaryCollision(createdVehicle);
+        createdFollowCamera.update(deltaTime, createdVehicle.getSpeed());
+      }
 
-      // 4. 执行渲染
+      // 3. 执行渲染
       createdEngine.render();
 
-      // 5. 刷新仪表盘与性能面板
+      // 4. 刷新竞速 HUD 与性能监控面板
+      createdRaceHUD.update(createdRaceManager);
       const renderInfo = createdEngine.getRenderInfo();
       createdOverlay.update({
         fps: createdTime.currentFps,
@@ -151,7 +189,7 @@ export function initApp(options?: InitAppOptions): AppInstance {
       });
     });
 
-    // 10. 启动时间循环
+    // 12. 启动时间循环
     createdTime.start();
 
     const dispose = () => {
@@ -179,6 +217,14 @@ export function initApp(options?: InitAppOptions): AppInstance {
         createdTrackScene.dispose();
         createdTrackScene = null;
       }
+      if (createdRaceHUD) {
+        createdRaceHUD.dispose();
+        createdRaceHUD = null;
+      }
+      if (createdRaceManager) {
+        createdRaceManager.dispose();
+        createdRaceManager = null;
+      }
       if (createdTime) {
         createdTime.dispose();
         createdTime = null;
@@ -195,7 +241,7 @@ export function initApp(options?: InitAppOptions): AppInstance {
       if (typeof window !== 'undefined') {
         (window as any).__LEAP_SPEED_APP__ = null;
       }
-      console.log('🧹 《飞跃极速》阶段 2 驾驶系统资源已完全释放！');
+      console.log('🧹 《飞跃极速》阶段 3.1 竞速系统资源已完全释放！');
     };
 
     currentApp = {
@@ -207,6 +253,8 @@ export function initApp(options?: InitAppOptions): AppInstance {
       vehicleController: createdVehicle,
       followCamera: createdFollowCamera,
       overlay: createdOverlay,
+      raceManager: createdRaceManager,
+      raceHUD: createdRaceHUD,
       dispose
     };
 
@@ -214,16 +262,18 @@ export function initApp(options?: InitAppOptions): AppInstance {
       (window as any).__LEAP_SPEED_APP__ = currentApp;
     }
 
-    console.log('🚀 《飞跃极速》阶段 2 · 原创科幻飞车与基础驾驶系统就绪！');
+    console.log('🚀 《飞跃极速》阶段 3.1 · 核心竞速闭环系统就绪！');
     return currentApp;
   } catch (error) {
-    console.error('❌ 初始化失败，正在执行阶段 2 异常原子回滚:', error);
+    console.error('❌ 初始化失败，正在执行阶段 3.1 异常原子回滚:', error);
     if (unregisterUpdate) unregisterUpdate();
     if (createdInput) createdInput.dispose();
     if (createdFollowCamera) createdFollowCamera.dispose();
     if (createdVehicle) createdVehicle.dispose();
     if (createdRacer) createdRacer.dispose();
     if (createdTrackScene) createdTrackScene.dispose();
+    if (createdRaceHUD) createdRaceHUD.dispose();
+    if (createdRaceManager) createdRaceManager.dispose();
     if (createdTime) createdTime.dispose();
     if (createdEngine) createdEngine.dispose();
     if (createdOverlay) createdOverlay.dispose();
