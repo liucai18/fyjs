@@ -196,7 +196,7 @@ export function initApp(options?: InitAppOptions): AppInstance {
       createdEngine.render();
 
       // 4. 刷新竞速 HUD 与性能监控面板
-      createdRaceHUD.update(createdRaceManager);
+      createdRaceHUD.update(createdRaceManager, createdNitro);
       const renderInfo = createdEngine.getRenderInfo();
       createdOverlay.update({
         fps: createdTime.currentFps,

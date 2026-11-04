@@ -1,14 +1,16 @@
 import { RaceManager, RaceState } from '../race/RaceManager';
+import { NitroSystem } from '../vehicle/NitroSystem';
 
 /**
  * 飞跃极速 · 竞速核心 UI 交互与结算面板 (RaceHUD.ts)
- * 严格落实师父【阶段 3.1 开发任务书：核心竞速闭环】：
+ * 严格落实师父【阶段 3.2 氮气加速系统】：
  * 1. 3-2-1-GO 超大科幻霓虹动态倒计时横幅
  * 2. 实时毫秒级单圈用时 HUD (MM:SS.mmm)
  * 3. 赛道分段检查点进度指示 (Checkpoints: X/3)
- * 4. 暂停遮罩指示 (PAUSED)
- * 5. 完赛结算面板 (Final Results Modal)，展示成绩与极速，提示按 R 键重试
- * 6. 100% 幂等安全销毁 (dispose)，杜绝 DOM 孤儿节点与内存泄漏
+ * 4. 底部中央独立赛博霓虹氮气加速能量槽 (Nitro Boost Gauge)
+ * 5. 暂停遮罩指示 (PAUSED)
+ * 6. 完赛结算面板 (Final Results Modal)，展示成绩与极速，提示按 R 键重试
+ * 7. 100% 幂等安全销毁 (dispose)，杜绝 DOM 孤儿节点与内存泄漏
  */
 export class RaceHUD {
   private readonly container: HTMLElement;
@@ -17,6 +19,12 @@ export class RaceHUD {
   private checkpointEl: HTMLElement | null = null;
   private pauseModalEl: HTMLElement | null = null;
   private resultModalEl: HTMLElement | null = null;
+
+  // 阶段 3.2 氮气加速 HUD DOM 元素
+  private nitroContainerEl: HTMLElement | null = null;
+  private nitroLabelEl: HTMLElement | null = null;
+  private nitroValEl: HTMLElement | null = null;
+  private nitroFillEl: HTMLElement | null = null;
 
   private lastTimeStr: string = '';
   private lastCountdownText: string = '';
@@ -189,6 +197,93 @@ export class RaceHUD {
           box-shadow: 0 0 20px rgba(255, 59, 0, 0.5);
           cursor: pointer;
         }
+
+        /* 底部中央赛博霓虹氮气加速能量槽 */
+        .race-nitro-container {
+          position: absolute;
+          bottom: 24px;
+          left: 50%;
+          transform: translateX(-50%);
+          width: 320px;
+          background: rgba(6, 10, 20, 0.78);
+          backdrop-filter: blur(10px);
+          border: 1px solid rgba(0, 240, 255, 0.35);
+          border-radius: 8px;
+          padding: 8px 16px 10px 16px;
+          box-shadow: 0 0 20px rgba(0, 240, 255, 0.2);
+          transition: border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .race-nitro-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 6px;
+        }
+
+        .race-nitro-label {
+          font-size: 13px;
+          font-weight: 800;
+          color: #00f0ff;
+          letter-spacing: 1.5px;
+          text-shadow: 0 0 8px rgba(0, 240, 255, 0.6);
+          transition: color 0.15s ease;
+        }
+
+        .race-nitro-val {
+          font-size: 14px;
+          font-weight: 800;
+          color: #fff;
+          font-variant-numeric: tabular-nums;
+          letter-spacing: 1px;
+        }
+
+        .race-nitro-bar-track {
+          width: 100%;
+          height: 10px;
+          background: rgba(255, 255, 255, 0.1);
+          border-radius: 5px;
+          overflow: hidden;
+          position: relative;
+        }
+
+        .race-nitro-bar-fill {
+          height: 100%;
+          width: 100%;
+          background: linear-gradient(90deg, #00c6ff, #0072ff);
+          border-radius: 5px;
+          box-shadow: 0 0 10px rgba(0, 198, 255, 0.6);
+          transition: width 0.05s linear, background 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        /* 喷射激活状态 (Active) */
+        .race-nitro-active {
+          border-color: #ff5500 !important;
+          box-shadow: 0 0 30px rgba(255, 85, 0, 0.6) !important;
+        }
+
+        .race-nitro-active .race-nitro-label {
+          color: #ff5500 !important;
+          text-shadow: 0 0 12px rgba(255, 85, 0, 0.9) !important;
+        }
+
+        .race-nitro-active .race-nitro-bar-fill {
+          background: linear-gradient(90deg, #ff9900, #ff3b00) !important;
+          box-shadow: 0 0 15px rgba(255, 59, 0, 0.9) !important;
+        }
+
+        /* 能量耗尽空槽警告 (Empty) */
+        .race-nitro-empty {
+          border-color: #ff0044 !important;
+        }
+
+        .race-nitro-empty .race-nitro-label {
+          color: #ff0044 !important;
+        }
+
+        .race-nitro-empty .race-nitro-val {
+          color: #ff0044 !important;
+        }
       </style>
 
       <div class="race-top-bar">
@@ -197,6 +292,17 @@ export class RaceHUD {
       </div>
 
       <div class="race-countdown-banner" id="race-countdown">3</div>
+
+      <!-- 底部中央赛博霓虹氮气加速能量槽 -->
+      <div class="race-nitro-container" id="race-nitro-container">
+        <div class="race-nitro-header">
+          <div class="race-nitro-label" id="race-nitro-label">⚡ NITRO READY [SHIFT]</div>
+          <div class="race-nitro-val" id="race-nitro-val">100%</div>
+        </div>
+        <div class="race-nitro-bar-track">
+          <div class="race-nitro-bar-fill" id="race-nitro-fill"></div>
+        </div>
+      </div>
 
       <div class="race-pause-overlay" id="race-pause-overlay">
         <div class="race-pause-title">⏸️ 比赛暂停</div>
@@ -226,12 +332,17 @@ export class RaceHUD {
     this.countdownEl = document.getElementById('race-countdown');
     this.pauseModalEl = document.getElementById('race-pause-overlay');
     this.resultModalEl = document.getElementById('race-result-modal');
+
+    this.nitroContainerEl = document.getElementById('race-nitro-container');
+    this.nitroLabelEl = document.getElementById('race-nitro-label');
+    this.nitroValEl = document.getElementById('race-nitro-val');
+    this.nitroFillEl = document.getElementById('race-nitro-fill');
   }
 
   /**
-   * 逐帧刷新比赛 HUD
+   * 逐帧刷新比赛 HUD 与氮气状态
    */
-  public update(manager: RaceManager): void {
+  public update(manager: RaceManager, nitro?: NitroSystem): void {
     if (this.isDisposed) return;
 
     const state = manager.getState();
@@ -290,6 +401,33 @@ export class RaceHUD {
         if (finalSpeedEl) finalSpeedEl.innerText = `${Math.round(manager.getTopSpeedKmh())} km/h`;
       } else {
         this.resultModalEl.style.display = 'none';
+      }
+    }
+
+    // 6. 阶段 3.2 氮气加速能量条与状态更新
+    if (nitro && this.nitroFillEl && this.nitroValEl && this.nitroContainerEl && this.nitroLabelEl) {
+      const pct = nitro.getEnergyPercent();
+      const isBoosting = nitro.isBoosting();
+
+      this.nitroFillEl.style.width = `${pct}%`;
+      this.nitroValEl.innerText = `${pct}%`;
+
+      if (isBoosting) {
+        this.nitroContainerEl.classList.add('race-nitro-active');
+        this.nitroContainerEl.classList.remove('race-nitro-empty');
+        this.nitroLabelEl.innerText = '🔥 NITRO ACTIVE!';
+      } else if (pct <= 0) {
+        this.nitroContainerEl.classList.remove('race-nitro-active');
+        this.nitroContainerEl.classList.add('race-nitro-empty');
+        this.nitroLabelEl.innerText = '⚠️ NITRO DEPLETED';
+      } else {
+        this.nitroContainerEl.classList.remove('race-nitro-active');
+        this.nitroContainerEl.classList.remove('race-nitro-empty');
+        if (pct < 100) {
+          this.nitroLabelEl.innerText = '⚡ RECHARGING... [SHIFT]';
+        } else {
+          this.nitroLabelEl.innerText = '⚡ NITRO READY [SHIFT]';
+        }
       }
     }
   }
