@@ -13,24 +13,31 @@
 
 ![阶段 3.1 倒计时实机截图](./stage3_1_countdown.png)
 
-### 2. 阶段 3.1 正常驾驶竞速计时与检查点收集 (Racing HUD)
+### 2. 阶段 3.1 倒计时发车 GO! 阶段与计时同步启动 (GO Phase)
+* **文件路径**：`docs/screenshots/stage3_1_go.png`
+* **GitHub 直链**：[查看图片](https://raw.githubusercontent.com/liucai18/fyjs/main/docs/screenshots/stage3_1_go.png)
+* **核心内容**：发车信号 GO! 独立展示窗口（持续 500ms），翠绿高亮霓虹文字与呼吸缩放动效，发车瞬间控制解锁并精确同步正式计时起点。
+
+![阶段 3.1 发车 GO 实机截图](./stage3_1_go.png)
+
+### 3. 阶段 3.1 正常驾驶竞速计时与检查点收集 (Racing HUD)
 * **文件路径**：`docs/screenshots/stage3_1_racing_hud.png`
 * **GitHub 直链**：[查看图片](https://raw.githubusercontent.com/liucai18/fyjs/main/docs/screenshots/stage3_1_racing_hud.png)
 * **核心内容**：单圈高精度毫秒计时器实时累加（14.285s）、赛道关键检查点激活指示（1/3 CP）、167 km/h 高速推进。
 
 ![阶段 3.1 竞速计时实机截图](./stage3_1_racing_hud.png)
 
-### 3. 阶段 3.1 终点冲线结算面板展示 (Race Finished)
+### 4. 阶段 3.1 终点冲线结算面板展示 (Race Finished)
 * **文件路径**：`docs/screenshots/stage3_1_race_finished.png`
 * **GitHub 直链**：[查看图片](https://raw.githubusercontent.com/liucai18/fyjs/main/docs/screenshots/stage3_1_race_finished.png)
-* **核心内容**：前后两帧连续扫掠穿线检测（Continuous Swept-Segment Crossing）触发冲线判定、3/3 检查点全量门禁校验通过、完赛结算弹窗展示最终圈速（00:43.682）、极速（196 km/h）与一键重试引导。
+* **核心内容**：前后两帧连续扫掠穿线检测（Continuous Swept-Segment Crossing）触发冲线判定、3/3 检查点全量门禁校验通过、完赛结算弹窗展示最终圈速（00:43.682）、极速（196 km/h）与一键重试引导。完赛后动力学完全锁死，杜绝继续开动。
 
 ![阶段 3.1 完赛结算实机截图](./stage3_1_race_finished.png)
 
-### 4. 阶段 3.1 一键重试按 R 瞬移回起跑线 (Retry Ready)
+### 5. 阶段 3.1 一键重试按 R 瞬移回起跑线 (Retry Ready)
 * **文件路径**：`docs/screenshots/stage3_1_retry_ready.png`
 * **GitHub 直链**：[查看图片](https://raw.githubusercontent.com/liucai18/fyjs/main/docs/screenshots/stage3_1_retry_ready.png)
-* **核心内容**：按 R 键干净重置赛车位置回到起跑线 (65, 0.45, -25)、朝向归零、动力清空、计时与检查点全部重置，无缝启动下一轮倒计时。
+* **核心内容**：按 R 键干净重置赛车位置回到起跑线 (65, 0.45, -25)、朝向归零、动力清空、计时与检查点全部重置，长按 R 键具备防自动重复保护，无缝启动下一轮倒计时。
 
 ![阶段 3.1 重试起跑实机截图](./stage3_1_retry_ready.png)
 
