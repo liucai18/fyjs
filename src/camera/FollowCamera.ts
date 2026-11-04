@@ -37,8 +37,8 @@ export class FollowCamera {
     this.camera = camera;
     this.baseFov = camera.fov;
 
-    this.idealOffset = options.idealOffset ?? new THREE.Vector3(0, 2.4, -6.6);
-    this.lookOffset = options.lookOffset ?? new THREE.Vector3(0, 0.65, 3.5);
+    this.idealOffset = options.idealOffset ?? new THREE.Vector3(0, 2.85, -8.8);
+    this.lookOffset = options.lookOffset ?? new THREE.Vector3(0, 0.75, 4.0);
     this.positionDamping = options.positionDamping ?? 6.5;
     this.lookAtDamping = options.lookAtDamping ?? 8.5;
     this.enableSpeedFov = options.enableSpeedFov ?? true;

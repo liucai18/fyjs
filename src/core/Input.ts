@@ -23,6 +23,12 @@ export class Input {
   constructor() {
     this.keydownHandler = (e: KeyboardEvent) => {
       if (this.isDisposed) return;
+      // 阻止方向键与空格键触发浏览器窗口默认滚动行为
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
+        if (typeof e.preventDefault === 'function') {
+          e.preventDefault();
+        }
+      }
       this.keys.add(e.code);
     };
 

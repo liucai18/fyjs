@@ -192,6 +192,9 @@ export function initApp(options?: InitAppOptions): AppInstance {
         createdOverlay = null;
       }
       currentApp = null;
+      if (typeof window !== 'undefined') {
+        (window as any).__LEAP_SPEED_APP__ = null;
+      }
       console.log('🧹 《飞跃极速》阶段 2 驾驶系统资源已完全释放！');
     };
 
@@ -206,6 +209,10 @@ export function initApp(options?: InitAppOptions): AppInstance {
       overlay: createdOverlay,
       dispose
     };
+
+    if (typeof window !== 'undefined') {
+      (window as any).__LEAP_SPEED_APP__ = currentApp;
+    }
 
     console.log('🚀 《飞跃极速》阶段 2 · 原创科幻飞车与基础驾驶系统就绪！');
     return currentApp;

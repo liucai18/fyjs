@@ -4,15 +4,15 @@ import { VehicleController } from '../vehicle/VehicleController';
 /**
  * 飞跃极速 · 首条可驾驶科幻测试赛道 (TrackScene.ts)
  * 严格落实师父【任务四：第一条可驾驶测试赛道】：
- * 1. 连续道路闭环：全长约 600m 的大型双直道与大半径圆弧过弯赛道
+ * 1. 连续道路闭环：全长约 850m (2*220m 直道 + 2*pi*65m 弯道 ≈ 848.4m) 的大型跑道环
  * 2. 赛道视觉细节：
- *    - 高质感暗黑沥青赛道面 (宽 18m)
+ *    - 高质感暗黑沥青赛道面 (宽 20m)
  *    - 赛博双向霓虹发光防撞护栏 (Neon Guardrails)
- *    - 地面中央电光青间歇导引虚线与赛道边缘警示线
+ *    - 全闭环中央电光青间歇导引虚线与赛道边缘警示线
  *    - 起跑门架拱门 (Start/Finish Cyber Gantry) 与能量信标塔
  * 3. 物理边界碰撞与约束防穿模：
  *    - 实时监测飞车距离赛道边界距离
- *    - 若撞击护栏，施加反向弹力并降低车速，彻底杜绝掉出赛道穿模
+ *    - 若撞击护栏，施加法向反弹弹力并将瞬时速度降低 30% (保持 70% 速度)，彻底杜绝掉出赛道穿模
  */
 export class TrackScene {
   public readonly group: THREE.Group;
@@ -94,7 +94,31 @@ export class TrackScene {
     this.group.add(straightWest);
 
     // (B) 南北两端半圆形大弯道路面 (RingGeometry)
-    const curveGeo = this.trackGeo(new THREE.RingGeometry(
+    // 几何变换原理（彻底对齐护栏与碰撞坐标系）：
+    // RingGeometry 初始在 XY 平面。经 rotation.x = -Math.PI / 2 变换后：
+    // y 变为 z' = -y，且法线精确指向天顶 +Y (0, 1, 0)。
+    // 
+    // 北大弯 (North Curve, z_center = +straightLength / 2 = 110, 向 +Z 延伸至 185)：
+    // 在 XY 平面取 thetaStart = Math.PI, thetaLength = Math.PI，此时 y in [-R, 0]。
+    // 经 rotation.x = -Math.PI / 2 变换后，z' = -y in [0, +R]，即精确延伸至 [110, 185]！
+    const northCurveGeo = this.trackGeo(new THREE.RingGeometry(
+      this.radius - this.trackWidth / 2,
+      this.radius + this.trackWidth / 2,
+      64,
+      1,
+      Math.PI,
+      Math.PI
+    ));
+    const northCurve = new THREE.Mesh(northCurveGeo, roadMat);
+    northCurve.rotation.x = -Math.PI / 2;
+    northCurve.position.set(0, 0.02, this.straightLength / 2);
+    northCurve.receiveShadow = true;
+    this.group.add(northCurve);
+
+    // 南大弯 (South Curve, z_center = -straightLength / 2 = -110, 向 -Z 延伸至 -185)：
+    // 在 XY 平面取 thetaStart = 0, thetaLength = Math.PI，此时 y in [0, +R]。
+    // 经 rotation.x = -Math.PI / 2 变换后，z' = -y in [-R, 0]，即精确延伸至 [-185, -110]！
+    const southCurveGeo = this.trackGeo(new THREE.RingGeometry(
       this.radius - this.trackWidth / 2,
       this.radius + this.trackWidth / 2,
       64,
@@ -102,18 +126,8 @@ export class TrackScene {
       0,
       Math.PI
     ));
-
-    // 北大弯 (North Curve, z = +straightLength / 2)
-    const northCurve = new THREE.Mesh(curveGeo, roadMat);
-    northCurve.rotation.x = -Math.PI / 2;
-    northCurve.position.set(0, 0.02, this.straightLength / 2);
-    northCurve.receiveShadow = true;
-    this.group.add(northCurve);
-
-    // 南大弯 (South Curve, z = -straightLength / 2)
-    const southCurve = new THREE.Mesh(curveGeo, roadMat);
+    const southCurve = new THREE.Mesh(southCurveGeo, roadMat);
     southCurve.rotation.x = -Math.PI / 2;
-    southCurve.rotation.z = Math.PI;
     southCurve.position.set(0, 0.02, -this.straightLength / 2);
     southCurve.receiveShadow = true;
     this.group.add(southCurve);
@@ -221,6 +235,36 @@ export class TrackScene {
       dashW.rotation.x = -Math.PI / 2;
       dashW.position.set(-this.radius, 0.03, zPos);
       this.group.add(dashW);
+    }
+
+    // 弯道中心发光弧线虚线 (南北半圆每 12° 一段，形成连贯全闭环导引线)
+    const curveSegments = 16;
+    const curveDashGeo = this.trackGeo(new THREE.PlaneGeometry(0.35, 3.5));
+
+    for (let i = 1; i < curveSegments; i++) {
+      const alpha = (i / curveSegments) * Math.PI;
+
+      // 北大弯中心虚线 (z_center = +straightLength / 2 = 110)
+      const dashN = new THREE.Mesh(curveDashGeo, markMatCyan);
+      dashN.rotation.x = -Math.PI / 2;
+      dashN.rotation.z = alpha - Math.PI / 2;
+      dashN.position.set(
+        this.radius * Math.cos(alpha),
+        0.03,
+        this.straightLength / 2 + this.radius * Math.sin(alpha)
+      );
+      this.group.add(dashN);
+
+      // 南大弯中心虚线 (z_center = -straightLength / 2 = -110)
+      const dashS = new THREE.Mesh(curveDashGeo, markMatCyan);
+      dashS.rotation.x = -Math.PI / 2;
+      dashS.rotation.z = -alpha + Math.PI / 2;
+      dashS.position.set(
+        this.radius * Math.cos(alpha),
+        0.03,
+        -this.straightLength / 2 - this.radius * Math.sin(alpha)
+      );
+      this.group.add(dashS);
     }
   }
 

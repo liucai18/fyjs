@@ -56,6 +56,24 @@ describe('阶段 2 原创科幻飞车与基础驾驶动力学自动化测试', (
       expect(input.getState().forward).toBe(false);
     });
 
+    it('方向键与空格键事件触发时应调用 preventDefault 阻止页面滚动', () => {
+      const arrowEvent = new KeyboardEvent('keydown', { code: 'ArrowUp', cancelable: true });
+      const arrowSpy = vi.spyOn(arrowEvent, 'preventDefault');
+      window.dispatchEvent(arrowEvent);
+      expect(arrowSpy).toHaveBeenCalled();
+
+      const spaceEvent = new KeyboardEvent('keydown', { code: 'Space', cancelable: true });
+      const spaceSpy = vi.spyOn(spaceEvent, 'preventDefault');
+      window.dispatchEvent(spaceEvent);
+      expect(spaceSpy).toHaveBeenCalled();
+
+      // 普通字母键不应触发 preventDefault
+      const keyWEvent = new KeyboardEvent('keydown', { code: 'KeyW', cancelable: true });
+      const keyWSpy = vi.spyOn(keyWEvent, 'preventDefault');
+      window.dispatchEvent(keyWEvent);
+      expect(keyWSpy).not.toHaveBeenCalled();
+    });
+
     it('窗口失焦 (window.blur) 应自动清空所有按键，杜绝卡键', () => {
       input.triggerKeyDown('KeyW');
       input.triggerKeyDown('KeyD');
@@ -313,6 +331,37 @@ describe('阶段 2 原创科幻飞车与基础驾驶动力学自动化测试', (
 
       // 应当被沿法线推回赛道内
       expect(controller.group.position.z).toBeLessThan(110 + 78);
+
+      // 南半圆中心为 (0, -straightLength/2 = -110)
+      // 放置在距离中心 -78 的越界位置
+      controller.setTransform(0, 0.45, -110 - 78, 0);
+      track.checkBoundaryCollision(controller);
+      expect(controller.group.position.z).toBeGreaterThan(-110 - 78);
+    });
+
+    it('南北两端弯道路面网格几何精确延伸至外侧并与护栏完全对齐', () => {
+      const ringMeshes: THREE.Mesh[] = [];
+      track.group.traverse((obj) => {
+        if (obj instanceof THREE.Mesh && obj.geometry instanceof THREE.RingGeometry) {
+          ringMeshes.push(obj);
+        }
+      });
+
+      expect(ringMeshes.length).toBe(2);
+
+      // 计算两段半圆路面的包围盒
+      const box1 = new THREE.Box3().setFromObject(ringMeshes[0]);
+      const box2 = new THREE.Box3().setFromObject(ringMeshes[1]);
+
+      const [southBox, northBox] = box1.min.z < box2.min.z ? [box1, box2] : [box2, box1];
+
+      // 北大弯路面必须延伸至 +Z 方向 [110, 185]
+      expect(northBox.min.z).toBeGreaterThanOrEqual(109.9);
+      expect(northBox.max.z).toBeLessThanOrEqual(185.1);
+
+      // 南大弯路面必须延伸至 -Z 方向 [-185, -110]
+      expect(southBox.min.z).toBeGreaterThanOrEqual(-185.1);
+      expect(southBox.max.z).toBeLessThanOrEqual(-109.9);
     });
 
     it('dispose() 支持幂等安全释放', () => {

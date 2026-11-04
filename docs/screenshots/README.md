@@ -20,12 +20,23 @@
 
 ![阶段 2 极速冲刺实机截图](./stage2_high_speed_driving.png)
 
-### 3. 阶段 2 弯道极限过弯与侧倾实机画面 (Curve Cornering)
-* **文件路径**：`docs/screenshots/stage2_curve_cornering.png`
-* **GitHub 直链**：[查看图片](https://raw.githubusercontent.com/liucai18/fyjs/main/docs/screenshots/stage2_curve_cornering.png)
-* **核心内容**：127 km/h 高速大弯道转向、飞车物理侧倾倾角、赛道护栏碰撞反弹约束保护。
+### 3. 阶段 2 北大弯 138 km/h 极限过弯实机画面 (North Curve Driving)
+* **文件路径**：`docs/screenshots/stage2_north_curve_driving.png`
+* **GitHub 直链**：[查看图片](https://raw.githubusercontent.com/liucai18/fyjs/main/docs/screenshots/stage2_north_curve_driving.png)
+* **核心内容**：飞车以 138 km/h 侧倾顺滑通过北大弯 ($z \in [110, 185]$)，路面半圆几何与内外侧双色发光护栏、导引虚线 100% 严密对齐。
 
-![阶段 2 极限过弯实机截图](./stage2_curve_cornering.png)
+![阶段 2 北大弯实机截图](./stage2_north_curve_driving.png)
+
+### 4. 阶段 2 南大弯 150 km/h 极限过弯实机画面 (South Curve Driving)
+* **文件路径**：`docs/screenshots/stage2_south_curve_driving.png`
+* **GitHub 直链**：[查看图片](https://raw.githubusercontent.com/liucai18/fyjs/main/docs/screenshots/stage2_south_curve_driving.png)
+* **核心内容**：飞车以 150 km/h 侧倾顺滑通过南大弯 ($z \in [-185, -110]$)，全闭环沥青路面完全闭合无接缝，护栏边界碰撞实时法向回弹保护（瞬时速度降低 30%，动能保留约 49%）。
+
+![阶段 2 南大弯实机截图](./stage2_south_curve_driving.png)
+
+### 5. 阶段 2 赛道几何与物理规范说明
+* **赛道实际总长**：$2 \times 220\text{m (直道)} + 2\pi \times 65\text{m (圆弧)} \approx 848.4\text{m}$（约 850 米大型闭环跑道）。
+* **护栏弹性碰撞算法**：车辆接触护栏边界时施加法向反弹加速度，并将车辆瞬时速度乘以 0.7（即瞬时速度降低 30%，对应动能约为原始动能的 49%），彻底消除穿模与坠空隐患。
 
 ---
 
