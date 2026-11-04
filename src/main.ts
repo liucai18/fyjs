@@ -155,17 +155,25 @@ export function initApp(options?: InitAppOptions): AppInstance {
 
       // 2. 读取驾驶输入并驱动车辆物理
       let inputState = createdInput.getState();
-      
-      // 倒计时阶段或暂停阶段，强制锁死油门不产生驱动动力，严禁抢跑
-      if (createdRaceManager.getState() === RaceState.COUNTDOWN || createdRaceManager.getState() === RaceState.PAUSED) {
-        inputState = { ...inputState, forward: false, backward: false };
+      const isLocked = createdRaceManager.isControlLocked();
+      const raceState = createdRaceManager.getState();
+
+      // 处于控制锁定阶段 (未发车、3-2-1倒计时、暂停或冲线完赛) 强制清空驾驶输入
+      if (isLocked) {
+        inputState = { forward: false, backward: false, left: false, right: false, brake: true };
       }
 
-      // 非暂停状态下正常更新车辆动力学与摄像机
-      if (createdRaceManager.getState() !== RaceState.PAUSED) {
-        createdVehicle.update(deltaTime, inputState);
-        createdTrackScene.checkBoundaryCollision(createdVehicle);
-        createdFollowCamera.update(deltaTime, createdVehicle.getSpeed());
+      // 非暂停状态下处理车辆物理动力学与摄像机追踪
+      if (raceState !== RaceState.PAUSED) {
+        if (raceState === RaceState.FINISHED) {
+          // 冲线完赛状态：锁死车辆动力学与驾驶输入，刹车冻结，保持最终结算成绩不变
+          createdVehicle.resetDynamics();
+          createdFollowCamera.update(deltaTime, 0);
+        } else {
+          createdVehicle.update(deltaTime, inputState);
+          createdTrackScene.checkBoundaryCollision(createdVehicle);
+          createdFollowCamera.update(deltaTime, createdVehicle.getSpeed());
+        }
       }
 
       // 3. 执行渲染
