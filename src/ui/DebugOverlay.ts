@@ -1,6 +1,7 @@
 export interface DebugMetrics {
   fps: number;
   onePercentLowFps: number;
+  isWarmingUp: boolean;
   rawFrameTimeMs: number;
   gameDeltaMs: number;
   width: number;
@@ -12,8 +13,9 @@ export interface DebugMetrics {
 
 export class DebugOverlay {
   private container: HTMLElement;
+  private isDisposed: boolean = false;
 
-  // 阶段 1.1 优化：构造阶段一次性缓存 DOM 节点引用，消除每一帧多次 getElementById 查询开销
+  // DOM 节点引用缓存
   private fpsEl!: HTMLElement;
   private lowFpsEl!: HTMLElement;
   private rawFtEl!: HTMLElement;
@@ -22,6 +24,10 @@ export class DebugOverlay {
   private dprEl!: HTMLElement;
   private dcEl!: HTMLElement;
   private triEl!: HTMLElement;
+
+  // 阶段 1.2 建议优化：DOM 更新节流器（150ms），大幅减轻 UI 重绘与样式重排
+  private lastDomUpdateTime: number = 0;
+  private readonly throttleIntervalMs: number = 150;
 
   constructor(containerId: string = 'debug-overlay') {
     const el = document.getElementById(containerId);
@@ -37,7 +43,7 @@ export class DebugOverlay {
     this.container.innerHTML = `
       <div class="title">
         <span>⚡ 飞跃极速 · 引擎调试台</span>
-        <span id="dbg-status" style="color: #4ade80; font-size: 11px;">RUNNING (v1.1)</span>
+        <span id="dbg-status" style="color: #4ade80; font-size: 11px;">RUNNING (v1.2)</span>
       </div>
       <div class="item">
         <span class="label">平均帧率 (FPS):</span>
@@ -73,7 +79,7 @@ export class DebugOverlay {
       </div>
       <div class="item">
         <span class="label">生命周期状态:</span>
-        <span class="val" style="color: #38bdf8;">阶段 1.1 完善</span>
+        <span class="val" style="color: #38bdf8;">阶段 1.2 最终版</span>
       </div>
     `;
   }
@@ -89,9 +95,19 @@ export class DebugOverlay {
     this.triEl = this.container.querySelector('#dbg-triangles') as HTMLElement;
   }
 
-  public update(metrics: DebugMetrics): void {
+  public update(metrics: DebugMetrics, force: boolean = false): void {
+    if (this.isDisposed) return;
+
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    if (!force && now - this.lastDomUpdateTime < this.throttleIntervalMs) {
+      return;
+    }
+    this.lastDomUpdateTime = now;
+
     if (this.fpsEl) this.fpsEl.textContent = `${metrics.fps}`;
-    if (this.lowFpsEl) this.lowFpsEl.textContent = `${metrics.onePercentLowFps}`;
+    if (this.lowFpsEl) {
+      this.lowFpsEl.textContent = metrics.isWarmingUp ? `${metrics.onePercentLowFps} (预热)` : `${metrics.onePercentLowFps}`;
+    }
     if (this.rawFtEl) this.rawFtEl.textContent = `${metrics.rawFrameTimeMs.toFixed(2)} ms`;
     if (this.gameDtEl) this.gameDtEl.textContent = `${metrics.gameDeltaMs.toFixed(2)} ms`;
     if (this.resEl) this.resEl.textContent = `${metrics.width} × ${metrics.height}`;
@@ -101,6 +117,8 @@ export class DebugOverlay {
   }
 
   public dispose(): void {
+    if (this.isDisposed) return;
+    this.isDisposed = true;
     this.container.innerHTML = '';
   }
 }

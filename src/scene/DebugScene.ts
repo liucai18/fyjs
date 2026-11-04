@@ -8,6 +8,7 @@ export class DebugScene {
   private gridHelper!: THREE.GridHelper;
   private axesHelper!: THREE.AxesHelper;
   private ground!: THREE.Mesh;
+  private isDisposed: boolean = false;
 
   constructor() {
     this.group = new THREE.Group();
@@ -16,7 +17,6 @@ export class DebugScene {
   }
 
   private buildGroundAndHelpers(): void {
-    // 1. 引擎测试用地平面（深灰微反射材质，接收柔和阴影）
     const planeGeo = new THREE.PlaneGeometry(60, 60);
     const planeMat = new THREE.MeshStandardMaterial({
       color: 0x1e293b,
@@ -28,19 +28,16 @@ export class DebugScene {
     this.ground.receiveShadow = true;
     this.group.add(this.ground);
 
-    // 2. 空间网格辅助线 (GridHelper)，60x60格，主副轴颜色区分
     this.gridHelper = new THREE.GridHelper(60, 60, 0x38bdf8, 0x334155);
-    this.gridHelper.position.y = 0.01; // 略微抬高避免 Z-fighting
+    this.gridHelper.position.y = 0.01;
     this.group.add(this.gridHelper);
 
-    // 3. 坐标轴辅助线 (AxesHelper)，红 X, 绿 Y, 蓝 Z
     this.axesHelper = new THREE.AxesHelper(5);
     this.axesHelper.position.set(0, 0.02, 0);
     this.group.add(this.axesHelper);
   }
 
   private buildTestObjects(): void {
-    // 1. 测试立方体：验证 PBR 高光、法线以及投射阴影
     const cubeGeo = new THREE.BoxGeometry(2, 2, 2);
     const cubeMat = new THREE.MeshStandardMaterial({
       color: 0x38bdf8,
@@ -53,7 +50,6 @@ export class DebugScene {
     this.testCube.receiveShadow = true;
     this.group.add(this.testCube);
 
-    // 2. 测试球体：验证曲面光照反射与环境渐变
     const sphereGeo = new THREE.SphereGeometry(1.5, 32, 32);
     const sphereMat = new THREE.MeshStandardMaterial({
       color: 0xf43f5e,
@@ -66,7 +62,6 @@ export class DebugScene {
     this.testSphere.receiveShadow = true;
     this.group.add(this.testSphere);
 
-    // 3. 悬浮环体（Torus）：验证空心复杂结构的深度缓冲与自阴影
     const torusGeo = new THREE.TorusGeometry(1.5, 0.4, 24, 48);
     const torusMat = new THREE.MeshStandardMaterial({
       color: 0xfacc15,
@@ -81,6 +76,9 @@ export class DebugScene {
   }
 
   public update(deltaTime: number, elapsedTime: number): void {
+    // 阶段 1.2 防御：解绑销毁后彻底阻断一切逻辑更新
+    if (this.isDisposed) return;
+
     if (this.testCube) {
       this.testCube.rotation.x += deltaTime * 0.8;
       this.testCube.rotation.y += deltaTime * 1.0;
@@ -99,28 +97,55 @@ export class DebugScene {
   }
 
   /**
-   * 阶段 1.1 严谨资源释放：全量遍历并释放所有网格体、辅助线、几何体和材质，彻底避免内存泄漏
+   * 阶段 1.2 增强：采用 Set 集合精确去重释放 Geometry 与 Material，
+   * 具备完全的幂等性（重复调用安全），并完成从父级容器彻底解绑。
    */
   public dispose(): void {
+    if (this.isDisposed) return;
+    this.isDisposed = true;
+
+    const geometries = new Set<THREE.BufferGeometry>();
+    const materials = new Set<THREE.Material>();
+
     this.group.traverse((child) => {
       if (child instanceof THREE.Mesh || child instanceof THREE.LineSegments || child instanceof THREE.Line) {
         if (child.geometry) {
-          child.geometry.dispose();
+          geometries.add(child.geometry);
         }
         if (child.material) {
           if (Array.isArray(child.material)) {
-            child.material.forEach((m) => m.dispose());
+            child.material.forEach((mat) => materials.add(mat));
           } else {
-            child.material.dispose();
+            materials.add(child.material);
           }
         }
       }
     });
 
-    // 清空 Group 子元素并从父场景解绑
+    // 逐一释放去重后的几何体与材质
+    for (const geo of geometries) {
+      try {
+        geo.dispose();
+      } catch (err) {
+        console.warn('Warning disposing geometry:', err);
+      }
+    }
+
+    for (const mat of materials) {
+      try {
+        mat.dispose();
+      } catch (err) {
+        console.warn('Warning disposing material:', err);
+      }
+    }
+
     this.group.clear();
     if (this.group.parent) {
       this.group.parent.remove(this.group);
     }
+  }
+
+  public getDisposedState(): boolean {
+    return this.isDisposed;
   }
 }

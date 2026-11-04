@@ -4,6 +4,7 @@ export interface EngineOptions {
   canvas: HTMLCanvasElement;
   antialias?: boolean;
   shadows?: boolean;
+  renderer?: THREE.WebGLRenderer;
 }
 
 export class Engine {
@@ -11,9 +12,14 @@ export class Engine {
   public readonly camera: THREE.PerspectiveCamera;
   public readonly renderer: THREE.WebGLRenderer;
   private resizeHandler: () => void;
+  private isDisposed: boolean = false;
 
   constructor(options: EngineOptions) {
-    const { canvas, antialias = true, shadows = true } = options;
+    const { canvas, antialias = true, shadows = true, renderer } = options;
+
+    if (!canvas) {
+      throw new Error('Engine requires a valid HTMLCanvasElement');
+    }
 
     // 1. 初始化场景
     this.scene = new THREE.Scene();
@@ -21,13 +27,15 @@ export class Engine {
     this.scene.fog = new THREE.FogExp2(0x0f172a, 0.015);
 
     // 2. 初始化透视相机
-    const aspect = window.innerWidth / window.innerHeight;
+    const width = typeof window !== 'undefined' ? window.innerWidth : 1280;
+    const height = typeof window !== 'undefined' ? window.innerHeight : 720;
+    const aspect = width / Math.max(1, height);
     this.camera = new THREE.PerspectiveCamera(60, aspect, 0.1, 1000);
     this.camera.position.set(0, 10, 20);
     this.camera.lookAt(0, 0, 0);
 
-    // 3. 初始化 WebGL 渲染器
-    this.renderer = new THREE.WebGLRenderer({
+    // 3. 初始化 WebGL 渲染器 (支持测试环境依赖注入)
+    this.renderer = renderer ?? new THREE.WebGLRenderer({
       canvas,
       antialias,
       powerPreference: 'high-performance',
@@ -39,8 +47,8 @@ export class Engine {
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.0;
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.renderer.setPixelRatio(typeof window !== 'undefined' ? Math.min(window.devicePixelRatio, 2) : 1);
+    this.renderer.setSize(width, height);
 
     // 5. 阴影系统配置
     if (shadows) {
@@ -53,15 +61,15 @@ export class Engine {
 
     // 7. 窗口尺寸自适应
     this.resizeHandler = this.onWindowResize.bind(this);
-    window.addEventListener('resize', this.resizeHandler);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('resize', this.resizeHandler);
+    }
   }
 
   private setupLighting(): void {
-    // 环境光：微弱冷色泛光，保留暗部细节
     const ambientLight = new THREE.AmbientLight(0xcfd8dc, 0.6);
     this.scene.add(ambientLight);
 
-    // 主平行光：模拟阳光/高空泛光灯，投射柔和阴影
     const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
     dirLight.position.set(15, 25, 15);
     dirLight.castShadow = true;
@@ -76,17 +84,18 @@ export class Engine {
     dirLight.shadow.bias = -0.0005;
     this.scene.add(dirLight);
 
-    // 辅助侧向补光（霓虹蓝紫微光，契合赛车与未来极速风格）
     const rimLight = new THREE.DirectionalLight(0x38bdf8, 0.4);
     rimLight.position.set(-15, 10, -15);
     this.scene.add(rimLight);
   }
 
   private onWindowResize(): void {
+    if (this.isDisposed || typeof window === 'undefined') return;
+
     const width = window.innerWidth;
     const height = window.innerHeight;
 
-    this.camera.aspect = width / height;
+    this.camera.aspect = width / Math.max(1, height);
     this.camera.updateProjectionMatrix();
 
     this.renderer.setSize(width, height);
@@ -94,6 +103,7 @@ export class Engine {
   }
 
   public render(): void {
+    if (this.isDisposed) return;
     this.renderer.render(this.scene, this.camera);
   }
 
@@ -103,6 +113,9 @@ export class Engine {
     geometries: number;
     textures: number;
   } {
+    if (this.isDisposed) {
+      return { drawCalls: 0, triangles: 0, geometries: 0, textures: 0 };
+    }
     return {
       drawCalls: this.renderer.info.render.calls,
       triangles: this.renderer.info.render.triangles,
@@ -111,8 +124,26 @@ export class Engine {
     };
   }
 
+  /**
+   * 阶段 1.2 幂等安全释放
+   */
   public dispose(): void {
-    window.removeEventListener('resize', this.resizeHandler);
-    this.renderer.dispose();
+    if (this.isDisposed) return;
+    this.isDisposed = true;
+
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('resize', this.resizeHandler);
+    }
+
+    try {
+      this.renderer.dispose();
+      this.renderer.forceContextLoss();
+    } catch (err) {
+      console.warn('Warning during renderer disposal:', err);
+    }
+  }
+
+  public getDisposedState(): boolean {
+    return this.isDisposed;
   }
 }
