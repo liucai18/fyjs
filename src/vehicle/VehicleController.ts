@@ -4,8 +4,10 @@ import { InputState } from '../core/Input';
 
 export interface VehiclePhysicsConfig {
   maxSpeed?: number;        // 最大前进极速 (m/s)，默认 60 m/s (216 km/h)
+  boostTopSpeed?: number;   // 氮气加速极速 (m/s)，默认 75 m/s (270 km/h)
   maxReverseSpeed?: number; // 最大倒车极速 (m/s)，默认 16 m/s
   acceleration?: number;    // 加速度 (m/s^2)
+  boostThrustMultiplier?: number; // 氮气推进力倍率，默认 1.85x
   brakeDeceleration?: number; // 刹车减速度 (m/s^2)
   dragDeceleration?: number;  // 自然空气/反重力阻尼减速度 (m/s^2)
   steerSpeed?: number;      // 最大转向角速度 (rad/s)
@@ -13,11 +15,12 @@ export interface VehiclePhysicsConfig {
 
 /**
  * 飞跃极速 · 科幻反重力赛车驾驶动力学控制器 (VehicleController.ts)
- * 严格落实师父【任务二：基础驾驶系统】：
- * - W / ↑：连续线性加速并提升推进器等离子尾焰与底盘照地光
+ * 严格落实师父【阶段 3.2 氮气加速系统】：
+ * - W / ↑：连续线性加速
+ * - Shift：触发氮气加速，推力与极速从 216 km/h 跃升至 270 km/h
+ * - 松开 Shift 或能量耗尽后平滑阻尼回落至普通动力
  * - S / ↓：强效刹车制动并在速度归零后线性倒车
  * - A / ← 与 D / →：平滑连续转向，速度越快抓地力侧倾越强烈
- * - 速度与航向角动力学解耦，无按键时具有平滑自然阻尼滑行
  */
 export class VehicleController {
   public readonly racer: HoverRacer;
@@ -25,8 +28,10 @@ export class VehicleController {
 
   // 物理动力学参数
   public readonly maxSpeed: number;
+  public readonly boostTopSpeed: number;
   public readonly maxReverseSpeed: number;
   public readonly acceleration: number;
+  public readonly boostThrustMultiplier: number;
   public readonly brakeDeceleration: number;
   public readonly dragDeceleration: number;
   public readonly steerSpeed: number;
@@ -42,8 +47,10 @@ export class VehicleController {
     this.group = racer.group;
 
     this.maxSpeed = config.maxSpeed ?? 60.0;
+    this.boostTopSpeed = config.boostTopSpeed ?? 75.0; // 270 km/h
     this.maxReverseSpeed = config.maxReverseSpeed ?? 16.0;
     this.acceleration = config.acceleration ?? 30.0;
+    this.boostThrustMultiplier = config.boostThrustMultiplier ?? 1.85;
     this.brakeDeceleration = config.brakeDeceleration ?? 45.0;
     this.dragDeceleration = config.dragDeceleration ?? 12.0;
     this.steerSpeed = config.steerSpeed ?? 2.2;
@@ -58,18 +65,21 @@ export class VehicleController {
     const dt = Math.min(deltaTime, 0.1); // 防御大卡顿瞬移
 
     // ==========================================
-    // 1. 加速、刹车与阻尼纵向动力学
+    // 1. 加速、氮气喷射、刹车与阻尼纵向动力学
     // ==========================================
     let throttleFactor = 0;
+    const isBoosting = !!input.nitro && input.forward && this.currentSpeed >= 0;
+    const currentMaxSpeed = isBoosting ? this.boostTopSpeed : this.maxSpeed;
+    const currentAcceleration = isBoosting ? this.acceleration * this.boostThrustMultiplier : this.acceleration;
 
     if (input.forward) {
-      throttleFactor = 1.0;
+      throttleFactor = isBoosting ? 1.5 : 1.0;
       if (this.currentSpeed < 0) {
         // 倒车中按 W：强力刹停
         this.currentSpeed += this.brakeDeceleration * dt;
       } else {
-        // 正常前进加速
-        this.currentSpeed = Math.min(this.currentSpeed + this.acceleration * dt, this.maxSpeed);
+        // 正常前进加速 (若开启氮气，极速与加速度均获得增益)
+        this.currentSpeed = Math.min(this.currentSpeed + currentAcceleration * dt, currentMaxSpeed);
       }
     } else if (input.backward) {
       if (this.currentSpeed > 0) {
@@ -90,11 +100,18 @@ export class VehicleController {
       }
     } else {
       // 无输入自然空气阻尼滑行 (Drag Deceleration)
+      // 若当前速度超出基础 maxSpeed (刚从氮气退出)，空气阻力加倍，平滑回落至 maxSpeed
+      const effectiveDrag = this.currentSpeed > this.maxSpeed ? this.dragDeceleration * 2.0 : this.dragDeceleration;
       if (this.currentSpeed > 0) {
-        this.currentSpeed = Math.max(this.currentSpeed - this.dragDeceleration * dt, 0);
+        this.currentSpeed = Math.max(this.currentSpeed - effectiveDrag * dt, 0);
       } else if (this.currentSpeed < 0) {
-        this.currentSpeed = Math.min(this.currentSpeed + this.dragDeceleration * dt, 0);
+        this.currentSpeed = Math.min(this.currentSpeed + effectiveDrag * dt, 0);
       }
+    }
+
+    // 若松开氮气但仍在按 W 前进且当前速度 > maxSpeed，以阻尼自然回落至基础 maxSpeed
+    if (input.forward && !isBoosting && this.currentSpeed > this.maxSpeed) {
+      this.currentSpeed = Math.max(this.maxSpeed, this.currentSpeed - this.dragDeceleration * 1.5 * dt);
     }
 
     // ==========================================

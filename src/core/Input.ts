@@ -4,6 +4,7 @@ export interface InputState {
   left: boolean;
   right: boolean;
   brake: boolean;
+  nitro?: boolean;
 }
 
 /**
@@ -69,13 +70,15 @@ export class Input {
     const left = this.keys.has('KeyA') || this.keys.has('ArrowLeft');
     const right = this.keys.has('KeyD') || this.keys.has('ArrowRight');
     const brake = this.keys.has('Space');
+    const nitro = this.keys.has('ShiftLeft') || this.keys.has('ShiftRight');
 
     return {
       forward,
       backward,
       left,
       right,
-      brake
+      brake,
+      nitro
     };
   }
 

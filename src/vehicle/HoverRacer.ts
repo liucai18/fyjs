@@ -489,7 +489,7 @@ export class HoverRacer {
    */
   public setThrottle(throttle: number): void {
     if (this.isDisposed) return;
-    this.currentThrottle = THREE.MathUtils.clamp(throttle, 0, 1);
+    this.currentThrottle = THREE.MathUtils.clamp(throttle, 0, 1.5);
 
     // 尾焰根据油门进行伸缩，并叠加高频燃烧抖动模拟
     const baseZ = 0.45 + this.currentThrottle * 2.1;
