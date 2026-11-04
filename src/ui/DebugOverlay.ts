@@ -106,7 +106,7 @@ export class DebugOverlay {
 
     if (this.fpsEl) this.fpsEl.textContent = `${metrics.fps}`;
     if (this.lowFpsEl) {
-      this.lowFpsEl.textContent = metrics.isWarmingUp ? `${metrics.onePercentLowFps} (预热)` : `${metrics.onePercentLowFps}`;
+      this.lowFpsEl.textContent = metrics.isWarmingUp ? '-- (预热)' : `${metrics.onePercentLowFps}`;
     }
     if (this.rawFtEl) this.rawFtEl.textContent = `${metrics.rawFrameTimeMs.toFixed(2)} ms`;
     if (this.gameDtEl) this.gameDtEl.textContent = `${metrics.gameDeltaMs.toFixed(2)} ms`;

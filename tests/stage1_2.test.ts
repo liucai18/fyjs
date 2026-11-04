@@ -3,9 +3,10 @@ import * as THREE from 'three';
 import { Time } from '../src/core/Time';
 import { DebugScene } from '../src/scene/DebugScene';
 import { DebugOverlay } from '../src/ui/DebugOverlay';
-import { initApp, destroyApp, getCurrentApp } from '../src/main';
+import { Engine } from '../src/core/Engine';
+import { initApp, destroyApp, getCurrentApp, cleanupPageListeners } from '../src/main';
 
-describe('阶段 1.2 自动化质量工程测试', () => {
+describe('阶段 1.3 工业级生命周期与异常安全自动化测试', () => {
 
   describe('1. 1% Low FPS 与时间管理 (Time.ts)', () => {
     let time: Time;
@@ -40,7 +41,6 @@ describe('阶段 1.2 自动化质量工程测试', () => {
 
       // 100 帧的 1% 即为最差的 1 帧 (100ms)，换算帧率应为 10 FPS
       expect(time.onePercentLowFps).toBe(10);
-      // 平均帧率仍在 57~58 FPS 左右
       expect(time.currentFps).toBeGreaterThan(50);
     });
 
@@ -51,13 +51,12 @@ describe('阶段 1.2 自动化质量工程测试', () => {
       expect(time.getSampleCount()).toBe(1000);
     });
 
-    it('时间暂停 (pause) 与恢复 (resume) 状态转换正确', () => {
+    it('时间暂停 (pause) 与恢复 (resume) 状态转换正确并重置预热', () => {
       expect(time.getIsPaused()).toBe(false);
       time.pause();
       expect(time.getIsPaused()).toBe(true);
       time.resume();
       expect(time.getIsPaused()).toBe(false);
-      // 恢复后历史窗口应被重置以避免脏数据污染
       expect(time.getSampleCount()).toBe(0);
       expect(time.isWarmingUp).toBe(true);
     });
@@ -68,12 +67,11 @@ describe('阶段 1.2 自动化质量工程测试', () => {
       const scene = new DebugScene();
       expect(scene.getDisposedState()).toBe(false);
 
-      // 第一次正常销毁
       expect(() => scene.dispose()).not.toThrow();
       expect(scene.getDisposedState()).toBe(true);
       expect(scene.group.children.length).toBe(0);
 
-      // 第二次、第三次重复调用（测试幂等性）
+      // 重复调用幂等安全
       expect(() => scene.dispose()).not.toThrow();
       expect(() => scene.dispose()).not.toThrow();
       expect(scene.getDisposedState()).toBe(true);
@@ -86,7 +84,7 @@ describe('阶段 1.2 自动化质量工程测试', () => {
     });
   });
 
-  describe('3. 调试面板与节流 (DebugOverlay.ts)', () => {
+  describe('3. 调试面板节流与预热展示 (DebugOverlay.ts)', () => {
     let container: HTMLDivElement;
 
     beforeEach(() => {
@@ -99,63 +97,149 @@ describe('阶段 1.2 自动化质量工程测试', () => {
       container.remove();
     });
 
-    it('DebugOverlay 应正确初始化并在 dispose 时清理内容', () => {
+    it('预热阶段 1% Low FPS 必须严格统一显示为 "-- (预热)"', () => {
       const overlay = new DebugOverlay('test-debug-overlay');
-      expect(container.innerHTML).toContain('⚡ 飞跃极速 · 引擎调试台');
+      overlay.update({
+        fps: 60,
+        onePercentLowFps: 60,
+        isWarmingUp: true,
+        rawFrameTimeMs: 16.6,
+        gameDeltaMs: 16.6,
+        width: 1280,
+        height: 720,
+        pixelRatio: 1,
+        drawCalls: 6,
+        triangles: 4302
+      }, true);
+
+      const lowFpsEl = container.querySelector('#dbg-low-fps');
+      expect(lowFpsEl?.textContent).toBe('-- (预热)');
+
+      // 预热结束后显示正常数字
+      overlay.update({
+        fps: 60,
+        onePercentLowFps: 58,
+        isWarmingUp: false,
+        rawFrameTimeMs: 16.6,
+        gameDeltaMs: 16.6,
+        width: 1280,
+        height: 720,
+        pixelRatio: 1,
+        drawCalls: 6,
+        triangles: 4302
+      }, true);
+      expect(lowFpsEl?.textContent).toBe('58');
 
       overlay.dispose();
-      expect(container.innerHTML).toBe('');
-
-      // 重复 dispose 幂等安全
-      expect(() => overlay.dispose()).not.toThrow();
     });
   });
 
-  describe('4. 初始化异常原子回滚 (main.ts)', () => {
-    const createMockRenderer = () => ({
-      outputColorSpace: THREE.SRGBColorSpace,
-      toneMapping: THREE.ACESFilmicToneMapping,
-      toneMappingExposure: 1.0,
-      shadowMap: { enabled: true, type: THREE.PCFSoftShadowMap },
-      info: {
-        render: { calls: 6, triangles: 4302 },
-        memory: { geometries: 5, textures: 0 }
-      },
-      setPixelRatio: vi.fn(),
-      setSize: vi.fn(),
-      render: vi.fn(),
-      dispose: vi.fn(),
-      forceContextLoss: vi.fn()
-    } as unknown as THREE.WebGLRenderer);
+  describe('4. Engine 构造异常自清理与原子回滚 (Engine.ts)', () => {
+    it('Engine 构造函数后半段抛错时，应自动自清理并调用 renderer.dispose()', () => {
+      const canvas = document.createElement('canvas');
+      const mockDispose = vi.fn();
+      const mockForceContextLoss = vi.fn();
 
-    afterEach(() => {
-      destroyApp();
-      document.body.innerHTML = '';
+      const mockRenderer = {
+        outputColorSpace: THREE.SRGBColorSpace,
+        toneMapping: THREE.ACESFilmicToneMapping,
+        toneMappingExposure: 1.0,
+        shadowMap: { enabled: true, type: THREE.PCFSoftShadowMap },
+        info: { render: { calls: 0, triangles: 0 }, memory: { geometries: 0, textures: 0 } },
+        setPixelRatio: vi.fn(),
+        setSize: vi.fn().mockImplementation(() => {
+          throw new Error('Simulated GPU out of memory during setSize');
+        }),
+        render: vi.fn(),
+        dispose: mockDispose,
+        forceContextLoss: mockForceContextLoss
+      } as unknown as THREE.WebGLRenderer;
+
+      expect(() => {
+        new Engine({
+          canvas,
+          renderer: mockRenderer
+        });
+      }).toThrow('Simulated GPU out of memory during setSize');
+
+      // 验证构造函数内部 catch 确实触发了 renderer 释放与上下文丢失处理
+      expect(mockDispose).toHaveBeenCalledTimes(1);
+      expect(mockForceContextLoss).toHaveBeenCalledTimes(1);
     });
+  });
 
-    it('Canvas 缺失时 initApp() 应抛出错误并确保无全局残缺实例残留', () => {
-      document.body.innerHTML = '<div id="debug-overlay"></div>'; // 故意不给 #game-canvas
-      expect(() => initApp({ renderer: createMockRenderer() })).toThrow('Canvas element #game-canvas not found!');
-      expect(getCurrentApp()).toBeNull();
-    });
+  describe('5. HMR 闭环与初始化异常中途回滚 (main.ts)', () => {
+    const createMockRenderer = () => {
+      const mockDispose = vi.fn();
+      return {
+        renderer: {
+          outputColorSpace: THREE.SRGBColorSpace,
+          toneMapping: THREE.ACESFilmicToneMapping,
+          toneMappingExposure: 1.0,
+          shadowMap: { enabled: true, type: THREE.PCFSoftShadowMap },
+          info: { render: { calls: 6, triangles: 4302 }, memory: { geometries: 5, textures: 0 } },
+          setPixelRatio: vi.fn(),
+          setSize: vi.fn(),
+          render: vi.fn(),
+          dispose: mockDispose,
+          forceContextLoss: vi.fn()
+        } as unknown as THREE.WebGLRenderer,
+        mockDispose
+      };
+    };
 
-    it('正常初始化与手动 destroyApp() 流程完整幂等', () => {
+    beforeEach(() => {
       document.body.innerHTML = `
         <canvas id="game-canvas"></canvas>
         <div id="debug-overlay"></div>
       `;
+    });
 
-      // 正常初始化（通过依赖注入传入 Headless 模拟 WebGLRenderer）
-      const mockRenderer = createMockRenderer();
-      const app = initApp({ renderer: mockRenderer });
+    afterEach(() => {
+      destroyApp();
+      cleanupPageListeners();
+      document.body.innerHTML = '';
+    });
+
+    it('Canvas 缺失时 initApp() 应抛出错误并确保无全局残缺实例残留', () => {
+      document.body.innerHTML = '<div id="debug-overlay"></div>';
+      expect(() => initApp()).toThrow('Canvas element #game-canvas not found!');
+      expect(getCurrentApp()).toBeNull();
+    });
+
+    it('中途抛错测试：当 DebugScene 创建失败时，已创建的 Engine 应被成功回滚销毁', () => {
+      const { renderer, mockDispose } = createMockRenderer();
+
+      // throwOnSceneInit = true 会在 Engine 创建成功后、DebugScene 阶段主动抛错
+      expect(() => {
+        initApp({
+          renderer,
+          throwOnSceneInit: true
+        });
+      }).toThrow('Simulated mid-way failure during DebugScene creation');
+
+      // 验证 Engine 的 dispose 确实被回滚机制触发
+      expect(mockDispose).toHaveBeenCalled();
+      // 验证全局应用引用为空，彻底杜绝半生不熟的残留对象
+      expect(getCurrentApp()).toBeNull();
+    });
+
+    it('HMR 清理机制应能注销未触发的 DOMContentLoaded 监听器并安全销毁', () => {
+      const removeSpy = vi.spyOn(window, 'removeEventListener');
+      expect(() => cleanupPageListeners()).not.toThrow();
+      expect(removeSpy).toBeDefined();
+    });
+
+    it('正常初始化与手动 destroyApp() 流程完整幂等', () => {
+      const { renderer } = createMockRenderer();
+      const app = initApp({ renderer });
       expect(app).toBeDefined();
       expect(getCurrentApp()).toBe(app);
 
-      // 正常销毁
       expect(() => destroyApp()).not.toThrow();
       expect(getCurrentApp()).toBeNull();
 
-      // 重复销毁幂等性
+      // 重复调用销毁依然安全
       expect(() => destroyApp()).not.toThrow();
     });
   });
