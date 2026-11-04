@@ -31,6 +31,12 @@ export class Input {
         }
       }
       this.keys.add(e.code);
+
+      // 单次离散动作键 (Action Keys): 忽略长按引起的键盘自动重复 (e.repeat === true)
+      if (e.repeat) {
+        return;
+      }
+
       if (e.code === 'KeyR') {
         this.triggerAction('reset');
       } else if (e.code === 'KeyP' || e.code === 'Escape') {
@@ -75,9 +81,20 @@ export class Input {
 
   /**
    * 模拟外部测试注入按键（用于单元测试）
+   * @param code 按键编码
+   * @param repeat 是否为长按自动重复事件 (e.repeat)
    */
-  public triggerKeyDown(code: string): void {
+  public triggerKeyDown(code: string, repeat: boolean = false): void {
+    if (this.isDisposed) return;
     this.keys.add(code);
+    if (repeat) {
+      return;
+    }
+    if (code === 'KeyR') {
+      this.triggerAction('reset');
+    } else if (code === 'KeyP' || code === 'Escape') {
+      this.triggerAction('pause');
+    }
   }
 
   public triggerKeyUp(code: string): void {
