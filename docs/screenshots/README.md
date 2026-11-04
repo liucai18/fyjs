@@ -4,16 +4,26 @@
 
 ---
 
+## 阶段 1.2 · 最终整改验收与自动化质检 (Phase 1.2)
+
+### 1. 阶段 1.2 最终版实机运行与高精度监控台
+* **文件路径**：`docs/screenshots/stage1_2_final_verification.png`
+* **GitHub 直链**：[查看图片](https://raw.githubusercontent.com/liucai18/fyjs/main/docs/screenshots/stage1_2_final_verification.png)
+* **核心升级要点**：
+  - **1000 帧大容量滑动窗口**：高精度计算真实 1% Low FPS，样本不足 60 帧自动标定预热状态。
+  - **150ms DOM 节流**：面板数据刷新采用 150ms 节流调度，彻底免除高频重绘损耗。
+  - **Set 去重与幂等资源释放**：全场景几何体与材质通过 Set 集合去重释放，`dispose()` 幂等安全重复调用。
+  - **9/9 自动化测试保障**：配置 Vitest 全自动化测试套件（覆盖 1% Low 统计、时间暂停恢复、重复销毁幂等性、初始化失败回滚），100% 通过。
+
+![阶段 1.2 实机截图](./stage1_2_final_verification.png)
+
+---
+
 ## 阶段 1.1 · 工程生命周期与性能监控完善 (Phase 1.1)
 
 ### 1. 阶段 1.1 实机运行与双精度性能监控台
 * **文件路径**：`docs/screenshots/stage1_1_lifecycle_and_metrics.png`
 * **GitHub 直链**：[查看图片](https://raw.githubusercontent.com/liucai18/fyjs/main/docs/screenshots/stage1_1_lifecycle_and_metrics.png)
-* **包含要素与整改要点**：
-  - **性能口径严格区分**：调试面板清晰区隔“真实物理耗时”（rawFrameTimeMs）与“游戏更新增量”（gameDeltaMs），彻底消除卡顿被 clamp 掩盖的误差。
-  - **实时 1% Low FPS 监控**：基于滑动窗口保留最近 120 帧，精准计算并实时展示最差 1% 的低帧率指标（实测 28 FPS）。
-  - **生命周期与资源释放**：支持全局 `destroyApp()`，完善全场景 GridHelper、AxesHelper 及 Mesh 几何与材质的递归销毁，并已原生接入 Vite HMR `import.meta.hot.dispose` 清理。
-  - **DOM 引用优化**：初始化阶段一次性缓存 DOM 节点引用，消除了主循环内重复 `getElementById` 的无效开销。
 
 ![阶段 1.1 实机截图](./stage1_1_lifecycle_and_metrics.png)
 
